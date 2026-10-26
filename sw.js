@@ -1,11 +1,11 @@
 // Cache por dia: los archivos de un dia (.../AAAA-MM-DD/...) nunca cambian, asi que se guardan y no se vuelven a bajar.
 // manifest.json siempre se pregunta primero a la red (si no hay red, se usa el guardado).
 // La pagina en si (html, css, js, textos) se muestra de la cache y se actualiza en segundo plano.
-const PAGINA = "stack-pagina-v4";
+const PAGINA = "stack-pagina-v5";
 const DATOS = "stack-datos";
 const DIA = /\/(\d{4}-\d{2}-\d{2})\//;
 const ARCHIVOS_PAGINA = ["./", "index.html", "css/app.css", "js/app.js", "js/config.js", "js/datos.js",
-  "js/buscar.js", "js/i18n.js", "js/ajustes.js", "iconos/logo-grande.png", "textos/es.json", "textos/en.json", "manifest.webmanifest", "iconos/icono-192.png", "iconos/logo.png", "favicon.ico"];
+  "js/buscar.js", "js/i18n.js", "js/ajustes.js", "js/escaner.js", "iconos/logo-grande.png", "textos/es.json", "textos/en.json", "manifest.webmanifest", "iconos/icono-192.png", "iconos/logo.png", "favicon.ico"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(PAGINA).then((c) => c.addAll(ARCHIVOS_PAGINA)).then(() => self.skipWaiting()));
@@ -24,6 +24,8 @@ async function limpiarDias(manifest) {
   for (const req of await c.keys()) {
     const m = req.url.match(DIA);
     if (m && !vigentes.has(m[1])) await c.delete(req);
+    const modelo = manifest.vision?.modelo;
+    if (modelo && req.url.includes("/modelo/") && !req.url.endsWith(modelo)) await c.delete(req);   // modelo viejo
   }
 }
 
@@ -32,6 +34,19 @@ self.addEventListener("fetch", (e) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.hostname.endsWith("scryfall.io")) return;              // imagenes: las guarda el navegador por su cuenta
+
+  // Motor del escaner (version fija en la URL) y modelo (el nombre cambia si cambia): se guardan para siempre.
+  if (url.hostname === "cdn.jsdelivr.net" || url.pathname.includes("/modelo/")) {
+    e.respondWith((async () => {
+      const c = await caches.open(DATOS);
+      const guardado = await c.match(req);
+      if (guardado) return guardado;
+      const r = await fetch(req);
+      if (r.ok) await c.put(req, r.clone());
+      return r;
+    })());
+    return;
+  }
 
   if (url.pathname.endsWith("/manifest.json")) {
     e.respondWith((async () => {

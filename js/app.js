@@ -4,6 +4,7 @@ import { cargar, datos, aPesos, yenAPesos, impresion } from "./datos.js";
 import { prepararIndice, buscar } from "./buscar.js";
 import { cargarIdioma, idiomaActual, t, pesos, moneda, fecha, porcentaje } from "./i18n.js";
 import { leerAjustes, guardarAjustes, usdMxn } from "./ajustes.js";
+import * as escaner from "./escaner.js";
 
 const app = document.getElementById("app");
 const FUENTES = [["tcg", "TCG"], ["har", "HAR"], ["har_jp", "HAR JP"], ["scg", "SCG"], ["ck", "CK"]];
@@ -14,6 +15,7 @@ let pestanaMovers = "suben";
 let moversAbiertos = false;          // en la portada los movers van plegados
 const abiertos = new Set();          // grupos con "Ver mas" abierto
 
+const ICONO_CAMARA = `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><rect x="8.5" y="7" width="7" height="10" rx="1"/></svg>`;
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const miniatura = (k) => {
   const sid = k.split(":")[0];
@@ -52,6 +54,7 @@ function buscador(q = "") {
       <input id="q" type="text" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false"
              placeholder="${esc(t("buscar.placeholder"))}" value="${esc(q)}" aria-label="${esc(t("buscar.placeholder"))}">
       <button type="button" class="borrar" aria-label="${esc(t("buscar.borrar"))}" ${q ? "" : "hidden"}>✕</button>
+      ${datos().manifest?.vision ? `<a class="camara" href="#/escaner" aria-label="${esc(t("escaner.abrir"))}">${ICONO_CAMARA}</a>` : ""}
     </form>`;
 }
 
@@ -171,6 +174,7 @@ async function vistaFicha(k) {
 function leerRuta() {
   const h = location.hash.replace(/^#/, "") || "/";
   if (h.startsWith("/c/")) return { pantalla: "ficha", k: decodeURIComponent(h.slice(3)) };
+  if (h.startsWith("/escaner")) return { pantalla: "escaner" };
   const q = new URLSearchParams(h.split("?")[1] || "").get("q") || "";
   return { pantalla: "inicio", q };
 }
@@ -247,11 +251,105 @@ app.addEventListener("click", (e) => {
 window.addEventListener("hashchange", () => {
   navegoDentro = true;
   const r = leerRuta();
-  if (r.pantalla === "ficha" || !document.getElementById("q")) {
+  if (r.pantalla !== "escaner") salirEscaner();
+  if (r.pantalla === "escaner") vistaEscaner();
+  else if (r.pantalla === "ficha" || !document.getElementById("q")) {
     if (r.pantalla === "inicio") pintarInicio(r.q); else vistaFicha(r.k);
   } else actualizarResultados(r.q);
   window.scrollTo(0, 0);
 });
+
+// ---------- Escaner ----------
+let escanerAbierto = false;
+
+function salirEscaner() {
+  if (!escanerAbierto) return;
+  escanerAbierto = false;
+  escaner.cerrarCamara();
+  document.body.classList.remove("en-escaner");
+  document.getElementById("escaner")?.remove();
+}
+
+function precioRapido(fila) {
+  const [, , , , , usd] = fila;
+  return pesos(aPesos(usd));
+}
+
+async function pintarResultado(panel, res, elegido = null) {
+  // fila elegida: la del acabado normal si existe; si no, la primera
+  const filas = res.filas;
+  if (!filas.length) { panel.innerHTML = `<div class="res-vacio">${esc(t("escaner.sin_precio"))}</div>`; panel.hidden = false; return; }
+  const fila = elegido || filas.find((f) => f[3] === "n") || filas[0];
+  const [k, set, num, acab] = fila;
+  const nombre = datos().buscar.nombres.find((n) => n[2].some((i) => datos().buscar.imp[i] === fila))?.[0] || "";
+  const acabados = filas.map((f) => `<button type="button" class="chip-acab ${f === fila ? "activo" : ""}" data-acab="${esc(f[0])}">${esc(t(`acabado.${f[3]}`))} · ${precioRapido(f)}</button>`).join("");
+  const otras = res.otras.flat().length
+    ? `<div class="res-otras"><span class="tenue">${esc(t("escaner.otras"))}</span> ${res.otras.map((fs) => `<button type="button" class="chip-acab" data-otra="${esc(fs[0][0])}">${esc(fs[0][1].toUpperCase())} #${esc(fs[0][2])}</button>`).join("")}</div>`
+    : "";
+  panel.innerHTML = `<a class="res-fila" href="#/c/${encodeURIComponent(k)}">
+      <img src="${miniatura(k)}" alt="">
+      <div class="medio"><div class="titulo">${esc(nombre)}</div><div class="sub">${esc(set.toUpperCase())} #${esc(num)} · ${esc(t(`acabado.${acab}`))}</div></div>
+      <div class="der"><div class="res-precio num">${precioRapido(fila)}</div><div class="tiendas">TCG</div></div></a>
+    <div class="res-tiendas num" id="res-tiendas"></div>
+    <div class="res-acabados">${acabados}</div>${otras}`;
+  panel.hidden = false;
+  panel.onclick = (e) => {
+    const b = e.target.closest("[data-acab]");
+    if (b) { e.preventDefault(); pintarResultado(panel, res, filas.find((f) => f[0] === b.dataset.acab)); return; }
+    const o = e.target.closest("[data-otra]");
+    if (o) {
+      e.preventDefault();
+      const sid = o.dataset.otra.split(":")[0];
+      const grupo = res.otras.find((fs) => fs[0][0].startsWith(sid));
+      const nuevo = { ...res, filas: grupo, otras: [res.filas, ...res.otras.filter((fs) => fs !== grupo)] };
+      pintarResultado(panel, nuevo);
+    }
+  };
+  // precios de tiendas (del trozo del dia; normalmente ya esta en cache)
+  try {
+    const f = await impresion(k);
+    const caja = panel.querySelector("#res-tiendas");
+    if (!f || !caja) return;
+    const partes = [];
+    if (f.har?.jpy) partes.push(`HAR ${pesos(yenAPesos(f.har.jpy))}`);
+    if (f.scg?.usd) partes.push(`SCG ${pesos(aPesos(f.scg.usd))}`);
+    if (f.ck?.usd) partes.push(`CK ${pesos(aPesos(f.ck.usd))}`);
+    if (f.ck?.compra_usd) partes.push(`<span class="sube">${esc(t("escaner.ck_compra", { precio: pesos(aPesos(f.ck.compra_usd)) }))}</span>`);
+    caja.innerHTML = partes.join(" · ");
+  } catch { /* sin precios de tienda: queda solo TCG */ }
+}
+
+async function vistaEscaner() {
+  if (escanerAbierto) return;
+  escanerAbierto = true;
+  document.body.classList.add("en-escaner");
+  const cont = document.createElement("section");
+  cont.id = "escaner";
+  cont.innerHTML = `<video playsinline muted autoplay></video>
+    <div class="guia-capa"><div class="guia"></div></div>
+    <a class="esc-cerrar" href="#/" data-atras aria-label="${esc(t("ajustes.cerrar"))}">✕</a>
+    <div class="esc-estado" id="esc-estado">${esc(t("escaner.preparando"))}</div>
+    <div class="esc-panel" id="esc-panel" hidden></div>`;
+  document.body.appendChild(cont);
+  cont.querySelector("[data-atras]").addEventListener("click", (e) => {
+    if (navegoDentro) { e.preventDefault(); history.back(); }
+  });
+  const estado = cont.querySelector("#esc-estado"), panel = cont.querySelector("#esc-panel");
+  const guia = cont.querySelector(".guia");
+  const textos = { buscando: t("escaner.buscando"), leyendo: t("escaner.leyendo"), listo: t("escaner.listo") };
+  try {
+    await escaner.preparar((paso) => { estado.textContent = t(`escaner.cargando_${paso}`); });
+    if (!escanerAbierto) return;
+    await escaner.abrirCamara(cont.querySelector("video"), guia, {
+      estado: (e) => { estado.textContent = textos[e] || ""; estado.dataset.estado = e; guia.dataset.estado = e; },
+      resultado: (res) => pintarResultado(panel, res),
+    });
+  } catch (e) {
+    const motivo = e?.name === "NotAllowedError" ? "escaner.sin_permiso" : e?.message === "sin_vision" ? "escaner.sin_indice" : "escaner.error";
+    estado.textContent = t(motivo);
+    estado.dataset.estado = "error";
+  }
+}
 
 document.querySelector(".idiomas").addEventListener("click", async (e) => {
   const b = e.target.closest("[data-idioma]");
@@ -325,7 +423,9 @@ async function iniciar() {
     prepararIndice(d.buscar);
     listo = true;
     const r = leerRuta();
-    if (r.pantalla === "ficha") vistaFicha(r.k); else pintarInicio(r.q);
+    if (r.pantalla === "ficha") vistaFicha(r.k);
+    else if (r.pantalla === "escaner") { pintarInicio(""); vistaEscaner(); }
+    else pintarInicio(r.q);
   } catch {
     const enLinea = navigator.onLine !== false;          // con internet: el problema es que no estan los archivos
     const titulo = enLinea ? t("error.sin_datos") : t("error.sin_red");

@@ -63,5 +63,19 @@
   "ajustes.propio_corto": "personalizado",
   "ajustes.nota_jpy": "Yen a dólar (JPY→USD) siempre es el del día: {jpy}",
   "ajustes.guardar": "Guardar",
-  "ajustes.chip": "USD ${usd} propio"
+  "ajustes.chip": "USD ${usd} propio",
+  "escaner.abrir": "Escanear carta",
+  "escaner.preparando": "Preparando escáner…",
+  "escaner.cargando_motor": "Cargando escáner… (solo la primera vez)",
+  "escaner.cargando_modelo": "Cargando reconocimiento… (solo la primera vez)",
+  "escaner.cargando_indice": "Cargando cartas del día…",
+  "escaner.buscando": "Pon la carta dentro del recuadro",
+  "escaner.leyendo": "Leyendo…",
+  "escaner.listo": "Listo · pon la siguiente",
+  "escaner.otras": "¿Otra edición?",
+  "escaner.ck_compra": "CK compra {precio}",
+  "escaner.sin_precio": "Sin precio hoy",
+  "escaner.sin_permiso": "Necesito permiso para usar la cámara. Actívalo en los ajustes del navegador.",
+  "escaner.sin_indice": "El escáner todavía no tiene las cartas del día.",
+  "escaner.error": "No pude abrir la cámara."
 }

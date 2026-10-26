@@ -63,5 +63,19 @@
   "ajustes.propio_corto": "custom",
   "ajustes.nota_jpy": "Yen to dollar (JPY→USD) always uses today's rate: {jpy}",
   "ajustes.guardar": "Save",
-  "ajustes.chip": "USD ${usd} custom"
+  "ajustes.chip": "USD ${usd} custom",
+  "escaner.abrir": "Scan card",
+  "escaner.preparando": "Getting the scanner ready…",
+  "escaner.cargando_motor": "Loading scanner… (first time only)",
+  "escaner.cargando_modelo": "Loading recognition… (first time only)",
+  "escaner.cargando_indice": "Loading today's cards…",
+  "escaner.buscando": "Place the card inside the frame",
+  "escaner.leyendo": "Reading…",
+  "escaner.listo": "Done · next card",
+  "escaner.otras": "Other printing?",
+  "escaner.ck_compra": "CK buys {precio}",
+  "escaner.sin_precio": "No price today",
+  "escaner.sin_permiso": "Camera permission is needed. Enable it in your browser settings.",
+  "escaner.sin_indice": "The scanner doesn't have today's cards yet.",
+  "escaner.error": "Couldn't open the camera."
 }
