@@ -177,6 +177,29 @@ body.en-portada .barra { border-bottom-color: transparent; }
 }
 .movers-portada { margin-top: 4px; }
 
+/* Detalles de la carta (despues de los precios) */
+.detalles { margin-top: 8px; }
+.cara { padding: 12px; border: 1px solid var(--linea); border-radius: var(--radio); background: var(--panel); margin-bottom: 8px; }
+.cara-cabeza { display: flex; justify-content: space-between; gap: 8px; align-items: center; font-weight: 700; }
+.costo { white-space: nowrap; }
+.sim { width: 16px; height: 16px; vertical-align: -2px; margin: 0 1px; }
+.tipo { color: var(--tenue); font-size: 14px; margin: 4px 0 8px; }
+.oracle { line-height: 1.5; }
+.sabor { color: var(--tenue); font-style: italic; margin-top: 8px; font-size: 14px; }
+.pt { text-align: right; font-weight: 700; margin-top: 6px; }
+.datos-carta { display: grid; gap: 4px; font-size: 14px; margin-top: 4px; }
+.dato { display: flex; justify-content: space-between; gap: 12px; }
+.dato span:last-child { text-align: right; }
+.legalidad { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; font-size: 14px; }
+.formato { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.estado-legal { font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--linea); color: var(--tenue); }
+.estado-legal.legal { color: var(--verde); border-color: color-mix(in srgb, var(--verde) 45%, transparent); }
+.estado-legal.ban { color: var(--rojo); border-color: color-mix(in srgb, var(--rojo) 45%, transparent); }
+.estado-legal.res { color: var(--ambar); border-color: color-mix(in srgb, var(--ambar) 45%, transparent); }
+.rulings { margin: 0; padding-left: 18px; display: grid; gap: 8px; font-size: 14px; line-height: 1.45; }
+.detalles details { margin-top: 8px; }
+.detalles summary { color: var(--verde); cursor: pointer; min-height: 40px; display: flex; align-items: center; }
+
 /* Escaner: pantalla completa */
 body.en-escaner { overflow: hidden; }
 #escaner { position: fixed; inset: 0; z-index: 10; background: #000; }
@@ -197,11 +220,12 @@ body.en-escaner { overflow: hidden; }
   color: #fff; font-weight: 600; text-shadow: 0 1px 3px #000;
 }
 .esc-estado[data-estado="listo"] { color: var(--verde); }
-.esc-estado[data-estado="error"] { color: var(--ambar); }
+.esc-estado[data-estado="error"], .esc-estado[data-estado="dificil"] { color: var(--ambar); }
 .esc-panel {
   position: absolute; left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom));
   background: var(--panel); border: 1px solid var(--linea); border-radius: 14px; padding: 10px 12px;
 }
+.esc-panel.anterior { opacity: .45; }
 .res-fila { display: flex; align-items: center; gap: 12px; text-decoration: none; }
 .res-fila img { width: 48px; height: 67px; border-radius: 4px; object-fit: cover; background: var(--linea); }
 .res-fila .medio { flex: 1; min-width: 0; }

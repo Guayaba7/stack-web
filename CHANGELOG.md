@@ -2,6 +2,52 @@
 
 All notable changes to the Stack web application are documented in this file.
 
+## 2026-10-26 — Text-verified scanner and card details
+
+### Added
+- **Card details on the printing page**, placed after the pricing section: mana cost (official symbols), type line,
+  rules text, flavor text, power/toughness or loyalty, artist, release date, set, language; legality in Standard,
+  Pioneer, Modern, Legacy, Vintage, Pauper, Commander and Premodern; and official rulings (first three shown, the
+  rest expandable). Double-faced cards show both faces. Data is requested on demand from the public Scryfall API
+  (`js/scryfall.js`) and kept in memory for the session.
+- **Text recognition in the scanner** using PP-OCRv5 Latin (PaddleOCR, `modelo/ocr-latin-1.onnx`, 7.9 MB), executed
+  with the same ONNX Runtime Web engine as the visual model. Reads English and Spanish names, light or dark lettering,
+  in approximately 25 ms per line on desktop hardware.
+
+### Changed
+- **The scanner no longer reports a result from the visual match alone.** The decision now follows this order:
+  1. **Name:** the name bar is read and matched against every card name (English, Spanish aliases and front faces of
+     double-faced cards) with an error-tolerant comparison. A card is fixed on one read with similarity of at least
+     0.86 and a clear lead, or on two agreeing reads of at least 0.72. When two names tie (for example
+     *Lightning Bolt* and *Emeritus of Conflict // Lightning Bolt*), the visual match decides.
+  2. **Printing:** the visual match selects the printing among those sharing the recognized name. For cards from
+     2020 onward, the collector line (set code and collector number) is read and used to confirm the exact printing;
+     an unreadable or ambiguous collector line never changes the selection.
+  3. **Rules text fallback:** when the name cannot be read after three attempts, the rules text box is segmented into
+     lines, read, and compared with the official rules text of the visual candidates. Two different cards with similar
+     text are treated as a non-result.
+  4. **Visual-only last resort:** only after 2.5 s without readable text and with a very high visual margin.
+- **No answer cycling:** once a card is fixed it does not change on its own. It is released when the card leaves the
+  guide or when the image no longer matches the fixed card for two consecutive frames (same card: similarity
+  0.89–1.00; different card: 0.26–0.51 in testing). The previous result remains visible, dimmed, until the next one.
+- Edge detection: when the detected proportions do not match a card (63 × 88 mm), the bottom edge is rebuilt from
+  the top edge and side directions, which prevents black-bordered cards on dark surfaces from being cropped.
+- After 3 s without a readable name, the scanner suggests moving closer, avoiding glare, or searching manually.
+- Service worker `stack-pagina-v7`: the text recognition model is cached permanently; only superseded visual models
+  are removed.
+
+### Measured performance (emulated phone camera, nine varied cards)
+- Names identified correctly: 8 of 8 readable cards (modern, 1994 frame, showcase, Spanish, double-faced and others);
+  0 incorrect results. The Japanese printing was not fixed, as intended, because it could not be verified.
+- Time from card entering the guide to result: 0.2–0.9 s.
+- Exact printing: 5 of 8; the remaining 3 were reprints with identical artwork, offered under "Other printing?".
+- First-time download for the scanner: approximately 20 MB (engine, visual model, text model and daily index).
+
+### Known limitations
+- Japanese and other non-Latin printings cannot be confirmed by text and are resolved only by the strict visual
+  last resort.
+- The camera cannot distinguish foil from nonfoil; the finish is selected in the result panel.
+
 ## 2026-10-26 — Card scanner, settings and new landing page
 
 ### Added

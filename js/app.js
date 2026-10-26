@@ -2,9 +2,10 @@
 import { POR_GRUPO, ZONA, DATOS_URL } from "./config.js";
 import { cargar, datos, aPesos, yenAPesos, impresion } from "./datos.js";
 import { prepararIndice, buscar } from "./buscar.js";
-import { cargarIdioma, idiomaActual, t, pesos, moneda, fecha, porcentaje } from "./i18n.js";
+import { cargarIdioma, idiomaActual, t, pesos, moneda, fecha, fechaLarga, porcentaje } from "./i18n.js";
 import { leerAjustes, guardarAjustes, usdMxn } from "./ajustes.js";
 import * as escaner from "./escaner.js";
+import * as scry from "./scryfall.js";
 
 const app = document.getElementById("app");
 const FUENTES = [["tcg", "TCG"], ["har", "HAR"], ["har_jp", "HAR JP"], ["scg", "SCG"], ["ck", "CK"]];
@@ -167,7 +168,73 @@ async function vistaFicha(k) {
       </table>
       <div class="pie num">${esc(t("ficha.cambio", { usd: `${usdMxn(m).valor ?? "—"}${usdMxn(m).propio ? ` (${t("ajustes.propio_corto")})` : ""}`, jpy: m.tc?.jpy_usd ?? "—" }))}<br>${esc(t("estado.datos_del", { dia: fecha(datos().diaUsado) }))}</div>
       ${enlaces ? `<div class="enlaces">${enlaces}</div>` : ""}
+      <section class="detalles" id="detalles" aria-live="polite"><div class="cargando"></div></section>
     </article>`;
+  pintarDetalles(f.sid, k);
+}
+
+// ---------- Detalles de la carta (Scryfall): texto, legalidad, rulings ----------
+const FORMATOS = ["standard", "pioneer", "modern", "legacy", "vintage", "pauper", "commander", "premodern"];
+
+function simbolos(texto) {
+  // {2}{B}{B} -> iconos de Scryfall; el resto del texto escapado y con saltos de linea
+  return esc(texto || "").replace(/\{([^}]+)\}/g, (_, sim) => {
+    const archivo = sim.replace(/\//g, "").toUpperCase();
+    return `<img class="sim" src="https://svgs.scryfall.io/card-symbols/${encodeURIComponent(archivo)}.svg" alt="{${esc(sim)}}" title="{${esc(sim)}}">`;
+  }).replace(/\n/g, "<br>");
+}
+
+function cara(c) {
+  const pt = c.power != null ? `${esc(c.power)}/${esc(c.toughness)}` : c.loyalty != null ? `${esc(t("detalles.lealtad"))} ${esc(c.loyalty)}` : c.defense != null ? `${esc(t("detalles.defensa"))} ${esc(c.defense)}` : "";
+  return `<div class="cara">
+      <div class="cara-cabeza"><span class="cara-nombre">${esc(c.name)}</span><span class="costo">${simbolos(c.mana_cost)}</span></div>
+      <div class="tipo">${esc(c.type_line || "")}</div>
+      ${c.oracle_text ? `<div class="oracle">${simbolos(c.oracle_text)}</div>` : ""}
+      ${c.flavor_text ? `<div class="sabor">${esc(c.flavor_text).replace(/\n/g, "<br>")}</div>` : ""}
+      ${pt ? `<div class="pt num">${pt}</div>` : ""}
+    </div>`;
+}
+
+async function pintarDetalles(sid, k) {
+  const caja = document.getElementById("detalles");
+  if (!caja) return;
+  let c;
+  try { c = await scry.carta(sid); } catch {
+    if (location.hash === `#/c/${encodeURIComponent(k)}`) caja.innerHTML = `<p class="tenue">${esc(t("detalles.sin_red"))}</p>`;
+    return;
+  }
+  if (location.hash !== `#/c/${encodeURIComponent(k)}`) return;
+  const caras = c.card_faces && !c.oracle_text ? c.card_faces : [c];
+  const estados = { legal: ["legal", "detalles.legal"], not_legal: ["no", "detalles.no_legal"], banned: ["ban", "detalles.prohibida"], restricted: ["res", "detalles.restringida"] };
+  const legal = FORMATOS.filter((f) => c.legalities?.[f]).map((f) => {
+    const [clase, txt] = estados[c.legalities[f]] || ["no", "detalles.no_legal"];
+    return `<div class="formato"><span>${esc(t(`formato.${f}`))}</span><span class="estado-legal ${clase}">${esc(t(txt))}</span></div>`;
+  }).join("");
+  const datosCarta = [
+    c.artist ? [t("detalles.artista"), esc(c.artist)] : null,
+    c.released_at ? [t("detalles.fecha"), esc(fechaLarga(c.released_at))] : null,
+    c.set_name ? [t("detalles.edicion"), `${esc(c.set_name)} (${esc((c.set || "").toUpperCase())}) #${esc(c.collector_number)}`] : null,
+    c.lang ? [t("detalles.idioma"), esc(c.lang.toUpperCase())] : null,
+  ].filter(Boolean).map(([a, b]) => `<div class="dato"><span class="tenue">${esc(a)}</span><span>${b}</span></div>`).join("");
+  caja.innerHTML = `<h2>${esc(t("detalles.titulo"))}</h2>
+    ${caras.map(cara).join("")}
+    <div class="datos-carta">${datosCarta}</div>
+    <h2>${esc(t("detalles.legalidad"))}</h2>
+    <div class="legalidad">${legal}</div>
+    <h2>${esc(t("detalles.rulings"))}</h2>
+    <div id="rulings"><div class="cargando"></div></div>`;
+  try {
+    const rs = await scry.reglas(sid);
+    const zona = document.getElementById("rulings");
+    if (!zona) return;
+    if (!rs.length) { zona.innerHTML = `<p class="tenue">${esc(t("detalles.sin_rulings"))}</p>`; return; }
+    const fila = (r) => `<li><span class="tenue num">${esc(fechaLarga(r.published_at))}</span> ${simbolos(r.comment)}</li>`;
+    const corto = rs.slice(0, 3).map(fila).join(""), resto = rs.slice(3).map(fila).join("");
+    zona.innerHTML = `<ul class="rulings">${corto}</ul>${resto ? `<details><summary>${esc(t("detalles.ver_todos", { n: rs.length }))}</summary><ul class="rulings">${resto}</ul></details>` : ""}`;
+  } catch {
+    const zona = document.getElementById("rulings");
+    if (zona) zona.innerHTML = `<p class="tenue">${esc(t("detalles.sin_red"))}</p>`;
+  }
 }
 
 // ---------- Rutas ----------
@@ -293,6 +360,7 @@ async function pintarResultado(panel, res, elegido = null) {
     <div class="res-tiendas num" id="res-tiendas"></div>
     <div class="res-acabados">${acabados}</div>${otras}`;
   panel.hidden = false;
+  panel.classList.remove("anterior");
   panel.onclick = (e) => {
     const b = e.target.closest("[data-acab]");
     if (b) { e.preventDefault(); pintarResultado(panel, res, filas.find((f) => f[0] === b.dataset.acab)); return; }
@@ -336,13 +404,13 @@ async function vistaEscaner() {
   });
   const estado = cont.querySelector("#esc-estado"), panel = cont.querySelector("#esc-panel");
   const guia = cont.querySelector(".guia");
-  const textos = { buscando: t("escaner.buscando"), leyendo: t("escaner.leyendo"), listo: t("escaner.listo") };
+  const textos = { buscando: t("escaner.buscando"), leyendo: t("escaner.leyendo"), listo: t("escaner.listo"), dificil: t("escaner.dificil") };
   try {
     await escaner.preparar((paso) => { estado.textContent = t(`escaner.cargando_${paso}`); });
     if (!escanerAbierto) return;
     await escaner.abrirCamara(cont.querySelector("video"), guia, {
       estado: (e) => { estado.textContent = textos[e] || ""; estado.dataset.estado = e; guia.dataset.estado = e; },
-      resultado: (res) => pintarResultado(panel, res),
+      resultado: (res) => { if (res) pintarResultado(panel, res); else panel.classList.add("anterior"); },
     });
   } catch (e) {
     const motivo = e?.name === "NotAllowedError" ? "escaner.sin_permiso" : e?.message === "sin_vision" ? "escaner.sin_indice" : "escaner.error";

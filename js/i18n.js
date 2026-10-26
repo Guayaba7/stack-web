@@ -57,6 +57,13 @@ export function fecha(isoDia, conHora = null) {
   return `${txt} · ${hora}`;
 }
 
+export function fechaLarga(isoDia) {
+  if (!isoDia) return "—";
+  const [a, m, d] = isoDia.split("-").map(Number);
+  return new Intl.DateTimeFormat(idioma === "en" ? "en-US" : "es-MX", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })
+    .format(new Date(Date.UTC(a, m - 1, d, 12)));
+}
+
 export function porcentaje(p) {
   if (p == null) return "";
   const signo = p > 0 ? "▲ +" : p < 0 ? "▼ " : "";
