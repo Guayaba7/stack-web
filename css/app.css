@@ -133,6 +133,46 @@ h2 { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: v
 .cargando { height: 3px; background: linear-gradient(90deg, transparent, var(--verde), transparent); background-size: 200% 100%; animation: carga 1.2s linear infinite; border-radius: 2px; margin: 8px 0 16px; }
 @keyframes carga { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 
+/* Engrane y hoja de ajustes */
+.engrane { display: grid; place-items: center; }
+.hoja {
+  border: 1px solid var(--linea); border-radius: 14px; background: var(--panel); color: var(--texto);
+  width: min(420px, calc(100% - 32px)); padding: 0;
+}
+.hoja::backdrop { background: rgba(0, 0, 0, .6); }
+.hoja-cuerpo { padding: 16px; }
+.hoja-cabeza { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.hoja-cabeza h2 { margin: 0; font-size: 18px; letter-spacing: 0; text-transform: none; color: var(--texto); }
+.cerrar { width: 44px; height: 44px; border: 0; background: transparent; color: var(--tenue); font-size: 20px; cursor: pointer; }
+.hoja fieldset { border: 0; margin: 0; padding: 0; }
+.hoja legend { font-weight: 600; margin-bottom: 8px; padding: 0; }
+.opcion { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; }
+.opcion input { width: 20px; height: 20px; accent-color: var(--verde); }
+.valor {
+  width: 100%; height: 48px; margin: 4px 0 0 30px; max-width: calc(100% - 30px); padding: 0 12px; font-size: 18px;
+  border-radius: 10px; border: 1px solid var(--linea); background: var(--fondo); color: var(--texto);
+}
+.valor:disabled { opacity: .4; }
+.nota { font-size: 13px; margin: 12px 0 0; }
+.guardar {
+  width: 100%; min-height: 48px; margin-top: 16px; border: 0; border-radius: 10px;
+  background: var(--verde); color: #04140b; font-weight: 700; cursor: pointer;
+}
+
+/* Portada (como el dibujo): logo grande, nombre y buscador al centro */
+body.en-portada .marca { visibility: hidden; }
+body.en-portada .barra { border-bottom-color: transparent; }
+.portada { display: flex; flex-direction: column; align-items: center; padding-top: 12vh; }
+.logo-grande { width: 132px; height: 132px; border-radius: 28px; }
+.nombre { font-size: 34px; margin: 14px 0 22px; letter-spacing: .02em; }
+.portada .buscador { width: 100%; }
+.portada .estado { justify-content: center; text-align: center; }
+.ver-movers {
+  display: block; margin: 16px auto 0; min-height: 44px; padding: 0 16px; border-radius: 999px;
+  border: 1px solid var(--linea); background: transparent; color: var(--tenue); cursor: pointer;
+}
+.movers-portada { margin-top: 4px; }
+
 @media (min-width: 720px) {
   main { padding-top: 24px; }
   .ficha-cabeza { display: grid; grid-template-columns: 240px 1fr; gap: 20px; align-items: start; }

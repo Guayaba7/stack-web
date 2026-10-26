@@ -3,6 +3,7 @@ import { POR_GRUPO, ZONA, DATOS_URL } from "./config.js";
 import { cargar, datos, aPesos, yenAPesos, impresion } from "./datos.js";
 import { prepararIndice, buscar } from "./buscar.js";
 import { cargarIdioma, idiomaActual, t, pesos, moneda, fecha, porcentaje } from "./i18n.js";
+import { leerAjustes, guardarAjustes, usdMxn } from "./ajustes.js";
 
 const app = document.getElementById("app");
 const FUENTES = [["tcg", "TCG"], ["har", "HAR"], ["har_jp", "HAR JP"], ["scg", "SCG"], ["ck", "CK"]];
@@ -10,6 +11,7 @@ const LETRAS = { H: "HAR", J: "HAR JP", S: "SCG", C: "CK" };
 let listo = false;
 let navegoDentro = false;             // si se llego a la ficha desde la pagina, "Atras" regresa a donde estaba
 let pestanaMovers = "suben";
+let moversAbiertos = false;          // en la portada los movers van plegados
 const abiertos = new Set();          // grupos con "Ver mas" abierto
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -40,6 +42,8 @@ function estadoDelDia() {
   if (!sinConexion && atraso === 1) texto += ` · ${t("estado.de_ayer")}`;
   if (!sinConexion && atraso > 1) texto += ` · ${t("estado.de_hace", { n: atraso })}`;
   const aviso = diaUsado !== m.dia ? `<div class="aviso">${esc(t("estado.paquete_viejo", { dia: fecha(diaUsado) }))}</div>` : "";
+  const tc = usdMxn(m);
+  if (tc.propio) chips.push(`<span class="chip ambar">${esc(t("ajustes.chip", { usd: tc.valor }))}</span>`);
   return `${aviso}<div class="estado"><span class="punto ${color}"></span><span>${esc(texto)}</span><span class="chips">${chips.join("")}</span></div>`;
 }
 
@@ -113,6 +117,7 @@ function filaPrecio(nombre, bloque, mxn, original, extra = "") {
 }
 
 async function vistaFicha(k) {
+  document.body.classList.remove("en-portada");
   app.innerHTML = `<a class="volver" href="#/" data-atras>${esc(t("ficha.atras"))}</a><div class="cargando"></div>`;
   let f = null;
   try { f = await impresion(k); } catch { f = null; }
@@ -157,7 +162,7 @@ async function vistaFicha(k) {
           ${filaPrecio(t("ficha.ck"), ck, aPesos(ck?.usd), moneda(ck?.usd, "USD"), compra)}
         </tbody>
       </table>
-      <div class="pie num">${esc(t("ficha.cambio", { usd: m.tc?.usd_mxn ?? "—", jpy: m.tc?.jpy_usd ?? "—" }))}<br>${esc(t("estado.datos_del", { dia: fecha(datos().diaUsado) }))}</div>
+      <div class="pie num">${esc(t("ficha.cambio", { usd: `${usdMxn(m).valor ?? "—"}${usdMxn(m).propio ? ` (${t("ajustes.propio_corto")})` : ""}`, jpy: m.tc?.jpy_usd ?? "—" }))}<br>${esc(t("estado.datos_del", { dia: fecha(datos().diaUsado) }))}</div>
       ${enlaces ? `<div class="enlaces">${enlaces}</div>` : ""}
     </article>`;
 }
@@ -170,8 +175,22 @@ function leerRuta() {
   return { pantalla: "inicio", q };
 }
 
+// Sin busqueda: portada (logo grande, nombre, buscador). Con busqueda: buscador arriba y resultados.
+const esPortada = (q) => q.trim().length < 2;
+
+function vistaPortadaExtra() {
+  if (!datos().movers) return "";
+  return `<button type="button" class="ver-movers" data-ver-movers aria-expanded="${moversAbiertos}">${esc(t("movers.titulo"))} ${moversAbiertos ? "▴" : "▾"}</button>
+    ${moversAbiertos ? `<div class="movers-portada">${vistaMovers()}</div>` : ""}`;
+}
+
 function pintarInicio(q) {
-  app.innerHTML = `${buscador(q)}${estadoDelDia()}<div id="contenido">${q.trim().length >= 2 ? vistaResultados(q) : vistaMovers()}</div>`;
+  const portada = esPortada(q);
+  document.body.classList.toggle("en-portada", portada);
+  app.innerHTML = portada
+    ? `<section class="portada"><img class="logo-grande" src="iconos/logo-grande.png" alt=""><h1 class="nombre">Stack</h1>
+        ${buscador(q)}${estadoDelDia()}</section><div id="contenido">${vistaPortadaExtra()}</div>`
+    : `${buscador(q)}${estadoDelDia()}<div id="contenido">${vistaResultados(q)}</div>`;
   const input = document.getElementById("q");
   if (matchMedia("(min-width: 720px)").matches || q) {
     input.focus();
@@ -180,8 +199,10 @@ function pintarInicio(q) {
 }
 
 function actualizarResultados(q) {
+  // Al pasar de portada a resultados (o al reves) cambia el acomodo: se repinta todo y el cursor sigue en el buscador.
+  if (esPortada(q) !== document.body.classList.contains("en-portada")) { pintarInicio(q); return; }
   const cont = document.getElementById("contenido");
-  if (cont) cont.innerHTML = q.trim().length >= 2 ? vistaResultados(q) : vistaMovers();
+  if (cont) cont.innerHTML = esPortada(q) ? vistaPortadaExtra() : vistaResultados(q);
   const borrar = document.querySelector(".borrar");
   if (borrar) borrar.hidden = !q;
 }
@@ -203,6 +224,7 @@ app.addEventListener("input", (e) => {
 });
 
 app.addEventListener("click", (e) => {
+  if (e.target.closest("[data-ver-movers]")) { moversAbiertos = !moversAbiertos; actualizarResultados(""); return; }
   const p = e.target.closest("[data-pestana]");
   if (p) { pestanaMovers = p.dataset.pestana; actualizarResultados(""); return; }
   const mas = e.target.closest("[data-grupo]");
@@ -236,6 +258,56 @@ document.querySelector(".idiomas").addEventListener("click", async (e) => {
   if (!b) return;
   await cargarIdioma(b.dataset.idioma);
   marcarIdioma();
+  const r = leerRuta();
+  if (r.pantalla === "ficha") vistaFicha(r.k); else pintarInicio(r.q);
+});
+
+// ---------- Ajustes (engrane) ----------
+const hoja = document.getElementById("ajustes");
+
+function pintarAjustes() {
+  const a = leerAjustes();
+  const m = datos().manifest;
+  const delDia = m?.tc?.usd_mxn;
+  hoja.innerHTML = `<form method="dialog" class="hoja-cuerpo">
+      <div class="hoja-cabeza"><h2>${esc(t("ajustes.titulo"))}</h2>
+        <button type="button" class="cerrar" data-cerrar aria-label="${esc(t("ajustes.cerrar"))}">✕</button></div>
+      <fieldset>
+        <legend>${esc(t("ajustes.usd_mxn"))}</legend>
+        <label class="opcion"><input type="radio" name="modo" value="dia" ${a.usd_modo !== "propio" ? "checked" : ""}>
+          <span>${esc(t("ajustes.del_dia"))}<span class="tenue num"> · ${delDia ?? "—"}${m?.tc?.dia ? ` (${esc(fecha(m.tc.dia))})` : ""}</span></span></label>
+        <label class="opcion"><input type="radio" name="modo" value="propio" ${a.usd_modo === "propio" ? "checked" : ""}>
+          <span>${esc(t("ajustes.propio"))}</span></label>
+        <input class="valor num" name="propio" type="number" inputmode="decimal" step="0.01" min="1"
+               placeholder="${delDia ?? "18.50"}" value="${a.usd_propio ?? ""}" aria-label="${esc(t("ajustes.propio"))}">
+        <p class="tenue nota">${esc(t("ajustes.nota_jpy", { jpy: m?.tc?.jpy_usd ?? "—" }))}</p>
+      </fieldset>
+      <button type="submit" class="guardar">${esc(t("ajustes.guardar"))}</button>
+    </form>`;
+  const campo = hoja.querySelector("[name=propio]");
+  const sync = () => { campo.disabled = hoja.querySelector("[name=modo]:checked").value !== "propio"; };
+  hoja.querySelectorAll("[name=modo]").forEach((r) => r.addEventListener("change", () => { sync(); if (!campo.disabled) campo.focus(); }));
+  sync();
+}
+
+document.getElementById("abrir-ajustes").addEventListener("click", () => {
+  if (!listo) return;
+  pintarAjustes();
+  hoja.showModal();
+});
+
+hoja.addEventListener("click", (e) => {
+  if (e.target === hoja || e.target.closest("[data-cerrar]")) hoja.close();     // tocar fuera o la X cierra sin guardar
+});
+
+hoja.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const modo = f.get("modo");
+  const propio = Number(String(f.get("propio") || "").replace(",", "."));
+  if (modo === "propio" && !(propio > 0)) { hoja.querySelector("[name=propio]").focus(); return; }
+  guardarAjustes({ usd_modo: modo, usd_propio: propio > 0 ? propio : null });
+  hoja.close();
   const r = leerRuta();
   if (r.pantalla === "ficha") vistaFicha(r.k); else pintarInicio(r.q);
 });

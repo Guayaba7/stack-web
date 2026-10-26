@@ -1,5 +1,6 @@
 // Lectura de los archivos que publica el job diario. La pagina no calcula precios: solo lee y convierte a pesos.
 import { DATOS_URL } from "./config.js";
+import { usdMxn } from "./ajustes.js";
 
 const trozos = new Map();          // "a3" -> filas de ese trozo (en memoria mientras la pagina esta abierta)
 let estado = { manifest: null, buscar: null, movers: null, sinConexion: false, diaUsado: null };
@@ -50,12 +51,13 @@ export async function cargar() {
 export function datos() { return estado; }
 
 export function aPesos(usd) {
-  const tc = estado.manifest?.tc?.usd_mxn;
+  const tc = usdMxn(estado.manifest).valor;
   return usd != null && tc ? usd * tc : null;
 }
 export function yenAPesos(jpy) {
-  const tc = estado.manifest?.tc;
-  return jpy != null && tc?.jpy_usd && tc?.usd_mxn ? jpy * tc.jpy_usd * tc.usd_mxn : null;
+  const jpyUsd = estado.manifest?.tc?.jpy_usd;
+  const tc = usdMxn(estado.manifest).valor;
+  return jpy != null && jpyUsd && tc ? jpy * jpyUsd * tc : null;
 }
 
 // Fila completa de una impresion (k = "<scryfall_id>:<n|f|e>"), del trozo p/xx.json.

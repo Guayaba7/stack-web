@@ -54,5 +54,14 @@
   "rareza.special": "Special",
   "rareza.bonus": "Bonus",
   "error.sin_datos": "Data not found",
-  "error.sin_datos_ayuda": "Check that {url} exists"
+  "error.sin_datos_ayuda": "Check that {url} exists",
+  "ajustes.titulo": "Settings",
+  "ajustes.cerrar": "Close",
+  "ajustes.usd_mxn": "Dollar to pesos (USD→MXN)",
+  "ajustes.del_dia": "Today's rate",
+  "ajustes.propio": "Custom",
+  "ajustes.propio_corto": "custom",
+  "ajustes.nota_jpy": "Yen to dollar (JPY→USD) always uses today's rate: {jpy}",
+  "ajustes.guardar": "Save",
+  "ajustes.chip": "USD ${usd} custom"
 }

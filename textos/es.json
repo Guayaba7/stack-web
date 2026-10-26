@@ -54,5 +54,14 @@
   "rareza.special": "Especial",
   "rareza.bonus": "Bonus",
   "error.sin_datos": "No encontré los datos",
-  "error.sin_datos_ayuda": "Revisa que exista {url}"
+  "error.sin_datos_ayuda": "Revisa que exista {url}",
+  "ajustes.titulo": "Ajustes",
+  "ajustes.cerrar": "Cerrar",
+  "ajustes.usd_mxn": "Dólar a pesos (USD→MXN)",
+  "ajustes.del_dia": "Del día",
+  "ajustes.propio": "Personalizado",
+  "ajustes.propio_corto": "personalizado",
+  "ajustes.nota_jpy": "Yen a dólar (JPY→USD) siempre es el del día: {jpy}",
+  "ajustes.guardar": "Guardar",
+  "ajustes.chip": "USD ${usd} propio"
 }
