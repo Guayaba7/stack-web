@@ -1,0 +1,17 @@
+{
+ "slug": "2026-10-27-bienvenido-a-stack",
+ "titulo": "Bienvenido a Stack",
+ "resumen": "Qué es Stack, de dónde salen sus precios y cómo sacarle provecho desde el celular y desde la aplicación.",
+ "autor": "López. M",
+ "fecha": "2026-10-27",
+ "portada": "portada.jpg",
+ "etiquetas": [
+  "stack",
+  "guía"
+ ],
+ "idioma": "es",
+ "destacado": true,
+ "borrador": false,
+ "minutos": 1,
+ "html": "<p>Stack nació para responder rápido una sola pregunta: <strong>¿cuánto vale esta carta hoy?</strong> Todos los días a primera hora se juntan los precios de cuatro tiendas y se convierten a pesos con el tipo de cambio del día.</p>\n<h2>De dónde salen los precios</h2>\n<div class=\"tabla\"><table><thead><tr><th class=\"\">Fuente</th><th class=\"\">Qué es</th><th class=\"der\">Moneda original</th></tr></thead><tbody><tr><td class=\"\">TCG</td><td class=\"\">Precio de mercado de TCGplayer (vía Scryfall)</td><td class=\"der\">USD</td></tr><tr><td class=\"\">Hareruya</td><td class=\"\">Precio de venta en Japón</td><td class=\"der\">JPY</td></tr><tr><td class=\"\">Star City Games</td><td class=\"\">Precio de venta, cerca de nuevo</td><td class=\"der\">USD</td></tr><tr><td class=\"\">Card Kingdom</td><td class=\"\">Venta y lo que pagan al comprarte</td><td class=\"der\">USD</td></tr></tbody></table></div>\n<aside class=\"recuadro consejo\"><b>Elige tu tienda de referencia</b><div>En Ajustes (el engrane) puedes elegir cuál precio quieres ver en grande. Si esa tienda no tiene la carta, Stack te muestra TCG en amarillo.</div></aside>\n<figure class=\"foto chica\"><img src=\"ajustes.png\" alt=\"Ajustes: fuente de precio preferida y tipo de cambio\" loading=\"lazy\"><figcaption>Ajustes: fuente de precio preferida y tipo de cambio</figcaption></figure>\n<h2>Cada impresión tiene su ficha</h2>\n<p>Busca una carta y entra a su ficha: ahí ves todas las tiendas, la legalidad, los rulings y puedes añadirla a tu inventario. Por ejemplo <a class=\"carta-ref\" data-carta=\"Lightning Bolt\">Lightning Bolt</a> o una impresión exacta como <a class=\"carta-ref\" data-carta=\"Counterspell\" data-set=\"7ed\">Counterspell</a>.</p>\n<figure class=\"foto chica\"><img src=\"ficha-de-carta.png\" alt=\"La ficha de una carta en el celular\" loading=\"lazy\"><figcaption>La ficha de una carta en el celular</figcaption></figure>\n<h2>Algunas cartas para seguir de cerca</h2>\n<div class=\"cartas-bloque\"><a class=\"carta-tarjeta\" data-carta=\"Ragavan, Nimble Pilferer\"><span>Ragavan, Nimble Pilferer</span></a><a class=\"carta-tarjeta\" data-carta=\"The One Ring\"><span>The One Ring</span></a><a class=\"carta-tarjeta\" data-carta=\"Orcish Bowmasters\"><span>Orcish Bowmasters</span></a><a class=\"carta-tarjeta\" data-carta=\"Sheoldred, the Apocalypse\"><span>Sheoldred, the Apocalypse</span></a></div>\n<hr>\n<p>¿Encontraste un precio raro? Repórtalo desde la aplicación con <strong>Ctrl+E</strong>. Cada reporte ayuda a que los precios sean más exactos.</p>"
+}

@@ -2,9 +2,11 @@
 // Los inventarios se valuan con los precios del dia. La app escribe todo; la pagina tambien puede añadir cartas a un inventario.
 import * as cuenta from "./cuenta.js";
 import { aplicarTema, temaGuardado } from "./temas.js";
-import { datos, aPesos } from "./datos.js";
+import { datos, aPesos, filaDe, precioFila } from "./datos.js";
+import { fuentePreferida, NOMBRE_FUENTE } from "./ajustes.js";
 import { normalizar } from "./buscar.js";
 import { t, pesos, fecha, idiomaActual } from "./i18n.js";
+import { logoSvg } from "./logo.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const miniatura = (sid) => `https://cards.scryfall.io/small/front/${sid[0]}/${sid[1]}/${sid}.jpg`;
@@ -64,6 +66,13 @@ export function accesosPortada() {
 
 // ---------------------------------------------------------------- entrar / crear / recuperar
 let modo = "entrar";
+let origen = "#/";                 // al entrar, se regresa a donde estaba la persona (no a la pantalla de cuenta)
+export function recordarOrigen(viejaUrl, nuevoHash) {
+  if (!nuevoHash.startsWith("#/cuenta")) return;
+  const h = String(viejaUrl || "").includes("#") ? "#" + String(viejaUrl).split("#")[1] : "#/";
+  if (!h.startsWith("#/cuenta")) origen = h;
+}
+function volverAlOrigen() { location.hash = origen && origen !== "#" ? origen : "#/"; }
 
 function formulario() {
   const campos = {
@@ -80,16 +89,17 @@ function formulario() {
       <label class="check"><input type="checkbox" name="entiendo" required> ${esc(t("cuenta.entiendo"))}</label>
       <label class="check"><input type="checkbox" name="recordar" checked> ${esc(t("cuenta.recordar"))}</label>
       <button class="primario" type="submit">${esc(t("cuenta.crear"))}</button>`,
-    recuperar: `<p class="nota">${esc(t("cuenta.recuperar_ayuda"))}</p>
-      <label>${esc(t("cuenta.usuario"))}<input name="usuario" autocomplete="username" autocapitalize="off" spellcheck="false" required></label>
+    recuperar: `<label>${esc(t("cuenta.usuario"))}<input name="usuario" autocomplete="username" autocapitalize="off" spellcheck="false" required></label>
       <label>${esc(t("cuenta.codigo"))}<input name="codigo" autocapitalize="characters" spellcheck="false" required placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXX"></label>
       <label>${esc(t("cuenta.clave_nueva"))}<input name="clave" type="password" autocomplete="new-password" required minlength="10"></label>
       <label>${esc(t("cuenta.clave2"))}<input name="clave2" type="password" autocomplete="new-password" required minlength="10"></label>
       <label class="check"><input type="checkbox" name="recordar" checked> ${esc(t("cuenta.recordar"))}</label>
       <button class="primario" type="submit">${esc(t("cuenta.recuperar"))}</button>`,
   };
-  return `<div class="pestanas">${["entrar", "crear"].map((m) => `<button type="button" data-modo="${m}" class="${modo === m ? "activo" : ""}">${esc(t(`cuenta.${m}`))}</button>`).join("")}</div>
-    <form class="form-cuenta" id="form-cuenta" data-forma="${modo}">${campos[modo]}<p class="error" id="cuenta-error" role="alert"></p></form>`;
+  const pest = modo === "recuperar" ? ""
+    : `<div class="segmentos pestanas-cuenta">${["entrar", "crear"].map((m) => `<button type="button" data-modo="${m}" class="${modo === m ? "activo" : ""}">${esc(t(`cuenta.${m}`))}</button>`).join("")}</div>`;
+  return `${pest}<form class="form-cuenta" id="form-cuenta" data-forma="${modo}">${campos[modo]}<p class="error" id="cuenta-error" role="alert"></p></form>
+    ${modo === "recuperar" ? `<button class="enlace" type="button" data-modo="entrar">${esc(t("cuenta.regresar"))}</button>` : ""}`;
 }
 
 function pantallaCodigo(app, codigo, despues) {
@@ -114,7 +124,12 @@ function pantallaCodigo(app, codigo, despues) {
 export function vistaCuenta(app) {
   if (!cuenta.disponible()) { app.innerHTML = `<div class="vacio">${esc(t("cuenta.sin_servidor"))}</div>`; return; }
   if (cuenta.sesion()) return vistaMiCuenta(app);
-  app.innerHTML = `<section class="cuenta"><h1>${esc(t(modo === "recuperar" ? "cuenta.recuperar" : modo === "crear" ? "cuenta.crear" : "cuenta.entrar"))}</h1>${formulario()}</section>`;
+  app.innerHTML = `<section class="cuenta tarjeta-cuenta">
+      <div class="cuenta-cabeza">${logoSvg("logo-cuenta", 44)}<div><h1>${esc(t(modo === "recuperar" ? "cuenta.recuperar" : "cuenta.titulo"))}</h1>
+        <p class="tenue">${esc(t(modo === "recuperar" ? "cuenta.recuperar_ayuda" : "cuenta.lema"))}</p></div></div>
+      ${formulario()}
+      <p class="nota candado">${esc(t("cuenta.privacidad_corta"))} <a href="#/privacidad">${esc(t("legal.privacidad"))}</a></p>
+    </section>`;
   app.querySelectorAll("button[data-modo]").forEach((b) => b.addEventListener("click", () => { modo = b.dataset.modo; vistaCuenta(app); }));
   const f = app.querySelector("#form-cuenta"), err = app.querySelector("#cuenta-error");
   f.addEventListener("submit", async (e) => {
@@ -125,8 +140,8 @@ export function vistaCuenta(app) {
     boton.disabled = true; const texto = boton.textContent; boton.textContent = t("cuenta.protegiendo");
     try {
       const recordar = !!d.recordar;
-      if (modo === "entrar") { await cuenta.entrar(d.usuario, d.clave, recordar); await refrescar(); location.hash = "#/cuenta"; vistaMiCuenta(app); }
-      else if (modo === "crear") { const codigo = await cuenta.crear(d.usuario, d.clave, recordar); marcarBoton(); pantallaCodigo(app, codigo, () => vistaMiCuenta(app)); }
+      if (modo === "entrar") { await cuenta.entrar(d.usuario, d.clave, recordar); await refrescar(); volverAlOrigen(); }
+      else if (modo === "crear") { const codigo = await cuenta.crear(d.usuario, d.clave, recordar); marcarBoton(); pantallaCodigo(app, codigo, volverAlOrigen); }
       else { await cuenta.recuperar(d.usuario, d.codigo, d.clave, recordar); await refrescar(); modo = "entrar"; vistaMiCuenta(app, t("cuenta.recuperada")); }
     } catch (ex) {
       err.textContent = ex.datos?.error === "bloqueada" ? t("cuenta.err.bloqueada") : mensaje(ex);
@@ -138,21 +153,28 @@ export function vistaCuenta(app) {
 function vistaMiCuenta(app, aviso = "") {
   const s = cuenta.sesion(), tema = perfil?.paleta || "GRN";
   const nombres = NOMBRE_TEMA[idiomaActual()] || NOMBRE_TEMA.es;
-  app.innerHTML = `<section class="cuenta">
+  const nInv = (indiceDocs || []).filter((d) => d.tipo.startsWith("inv:")).length;
+  const fila = (acc, texto, sub, cls = "") => `<button type="button" class="fila-accion ${cls}" data-acc="${acc}"><span><b>${esc(texto)}</b><small>${esc(sub)}</small></span><i>›</i></button>`;
+  app.innerHTML = `<section class="cuenta mi-cuenta">
       ${aviso ? `<div class="aviso">${esc(aviso)}</div>` : ""}
-      <h1>${esc(s.usuario)}</h1>
-      <div class="accesos"><a href="#/inv">${esc(t("inv.titulo"))}</a><a href="#/watch">${esc(t("watch.titulo"))}</a></div>
-      <h2>${esc(t("cuenta.tema"))}</h2>
-      <p><span class="chip">${esc(nombres[tema] || tema)}</span> <span class="tenue">${esc(t(perfil ? "cuenta.tema_app" : "cuenta.tema_sin"))}</span></p>
+      <div class="perfil-cabeza">
+        <div class="avatar">${esc(s.usuario.slice(0, 1).toUpperCase())}</div>
+        <div><h1>${esc(s.usuario)}</h1><p class="tenue"><span class="chip">${esc(nombres[tema] || tema)}</span> ${esc(t(perfil ? "cuenta.tema_app" : "cuenta.tema_sin"))}</p></div>
+      </div>
+      <div class="tiles">
+        <a class="tile" href="#/inv"><span class="tenue">${esc(t("inv.titulo"))}</span><b class="num">${nInv}</b><i>›</i></a>
+        <a class="tile" href="#/watch"><span class="tenue">${esc(t("watch.titulo"))}</span><b>${esc(t("cuenta.ver"))}</b><i>›</i></a>
+      </div>
       <h2>${esc(t("cuenta.seguridad"))}</h2>
-      <div class="enlaces">
-        <button type="button" data-acc="clave">${esc(t("cuenta.cambiar_clave"))}</button>
-        <button type="button" data-acc="codigo">${esc(t("cuenta.codigo_nuevo"))}</button>
-        <button type="button" data-acc="salir">${esc(t("cuenta.salir"))}</button>
-        <button type="button" data-acc="borrar" class="peligro">${esc(t("cuenta.borrar"))}</button>
+      <div class="grupo-acciones">
+        ${fila("clave", t("cuenta.cambiar_clave"), t("cuenta.cambiar_clave_sub"))}
+        ${fila("codigo", t("cuenta.codigo_nuevo"), t("cuenta.codigo_nuevo_sub"))}
+        ${fila("salir", t("cuenta.salir"), t("cuenta.salir_sub"))}
       </div>
       <div id="acc-zona"></div>
-      <p class="nota">${esc(t("cuenta.privacidad_corta"))}</p>
+      <h2>${esc(t("cuenta.zona_peligro"))}</h2>
+      <div class="grupo-acciones">${fila("borrar", t("cuenta.borrar"), t("cuenta.borrar_sub"), "peligro")}</div>
+      <p class="nota candado">${esc(t("cuenta.privacidad_corta"))}</p>
     </section>`;
   const zona = app.querySelector("#acc-zona");
   app.querySelectorAll("[data-acc]").forEach((b) => b.addEventListener("click", async () => {
@@ -203,9 +225,9 @@ function valuar(piezas) {
   const P = precios();
   let valor = 0, costo = 0, sinPrecio = 0, cartas = 0;
   for (const p of piezas || []) {
-    const usd = P.get(`${p.sid}:${LETRA[p.acab] || "n"}`), n = Number(p.cantidad) || 0;
+    const mxn = precioFila(filaDe(`${p.sid}:${LETRA[p.acab] || "n"}`), fuentePreferida()).mxn, n = Number(p.cantidad) || 0;
     cartas += n;
-    if (usd != null) valor += (aPesos(usd) || 0) * n; else sinPrecio += n;
+    if (mxn != null) valor += mxn * n; else sinPrecio += n;
     if (p.costo_prom != null) costo += p.costo_prom * n;
   }
   return { valor, costo, sinPrecio, cartas };
@@ -245,9 +267,8 @@ export async function vistaInventario(app, id) {
   let inv;
   try { inv = await cuenta.leer(`inv:${id}`); } catch (e) { app.innerHTML = `<div class="vacio">${esc(mensaje(e))}</div>`; return; }
   if (!inv) { app.innerHTML = `<a class="volver" href="#/inv">${esc(t("ficha.atras"))}</a><div class="vacio">${esc(t("inv.no_existe"))}</div>`; return; }
-  const P = precios();
   const filas = (inv.piezas || []).map((p) => {
-    const usd = P.get(`${p.sid}:${LETRA[p.acab] || "n"}`), n = Number(p.cantidad) || 0, unit = usd != null ? aPesos(usd) : null;
+    const n = Number(p.cantidad) || 0, unit = precioFila(filaDe(`${p.sid}:${LETRA[p.acab] || "n"}`), fuentePreferida()).mxn;
     return { ...p, n, unit, valor: unit != null ? unit * n : null, texto: normalizar(`${p.nombre} ${p.set} ${p.numero}`) };
   }).sort((a, b) => (b.valor ?? -1) - (a.valor ?? -1));
   const v = valuar(inv.piezas);
@@ -284,17 +305,18 @@ export async function vistaWatchlist(app) {
   if (!cartas.length) { app.innerHTML = `<h1 class="titulo-vista">${esc(t("watch.titulo"))}</h1><div class="vacio"><div class="grande">${esc(t("watch.vacio"))}</div>${esc(t("inv.vacio_ayuda"))}</div>`; return; }
   const P = precios();
   app.innerHTML = `<h1 class="titulo-vista">${esc(t("watch.titulo"))}</h1><ul class="lista">${cartas.map((c) => {
-    const k = `${c.sid}:${LETRA[c.acab] || "n"}`, usd = P.get(k), mxn = usd != null ? aPesos(usd) : null;
+    const k = `${c.sid}:${LETRA[c.acab] || "n"}`, usd = P.get(k), tcgMxn = usd != null ? aPesos(usd) : null;
+    const pref = precioFila(filaDe(k), fuentePreferida()), mxn = pref.mxn;
     let alerta = "";
     if (c.alerta_precio != null) {
-      const actual = c.alerta_moneda === "USD" ? usd : mxn;
+      const actual = c.alerta_moneda === "USD" ? usd : tcgMxn;      // las alertas de la app son sobre TCG
       const objetivo = c.alerta_moneda === "USD" ? `USD ${Number(c.alerta_precio).toFixed(2)}` : pesos(c.alerta_precio);
       alerta = actual != null && actual <= c.alerta_precio ? `<span class="sube">${esc(t("watch.alcanzo", { objetivo }))}</span>` : esc(t("watch.objetivo", { objetivo }));
     }
     return `<li><a class="fila" href="#/c/${encodeURIComponent(k)}">
       <img loading="lazy" alt="" src="${miniatura(c.sid)}" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'sin-img'}))">
       <div class="medio"><div class="titulo">${esc(c.nombre)}</div><div class="sub">${esc(String(c.set || "").toUpperCase())} #${esc(c.numero)} · ${esc(t(`acabado.${LETRA[c.acab] || "n"}`))}${alerta ? ` · ${alerta}` : ""}</div></div>
-      <div class="der"><div class="precio num">${mxn != null ? pesos(mxn) : "—"}</div><div class="tiendas">TCG</div></div></a></li>`;
+      <div class="der"><div class="precio num">${mxn != null ? pesos(mxn) : "—"}</div><div class="tiendas">${NOMBRE_FUENTE[pref.fuente]}</div></div></a></li>`;
   }).join("")}</ul>`;
 }
 

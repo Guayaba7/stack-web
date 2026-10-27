@@ -5,7 +5,8 @@
 //   2) saca su huella visual (modelo pequeno en el telefono) y la compara con todas las impresiones del dia
 //      -> esto da candidatos rapidos, pero por si solo ya NO basta para responder.
 // En paralelo, un lector de texto (OCR) en segundo plano:
-//   3) lee la barra del NOMBRE y la empareja contra todos los nombres (ingles y espanol, tolerando errores);
+//   3) lee la barra del NOMBRE y la empareja contra todos los nombres (ingles, espanol, frances, aleman, italiano,
+//      portugues y japones, tolerando errores);
 //      el nombre confirma la carta y la huella visual solo elige la edicion entre las de ese nombre;
 //   4) si el nombre no se deja leer (otro idioma, letra rara), lee la caja de TEXTO DE REGLAS y la compara con el
 //      texto oficial de los candidatos visuales (de Scryfall); si dos cartas distintas empatan, no adivina.
@@ -18,6 +19,9 @@ import * as scry from "./scryfall.js";
 const ORT_URL = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/";
 // Lector de texto: PP-OCRv5 "latin" (PaddleOCR) en ONNX. Lee ingles y espanol (acentos), letra clara u oscura, ~25 ms por linea.
 const OCR = { modelo: "modelo/ocr-latin-1.onnx", dicc: "modelo/ocr-latin-1.txt", alto: 48 };
+// Segundo lector para cartas en japones: PP-OCRv5 (chino, japones e ingles), pesos de 8 bits (4.5 MB). Se baja en segundo
+// plano cuando el escaner ya esta listo y solo se usa cuando el lector latino no pudo leer el nombre.
+const OCR_JA = { modelo: "modelo/ocr-ja-1.onnx", dicc: "modelo/ocr-ja-1.txt" };
 const MEAN = [0.485, 0.456, 0.406];
 const STD = [0.229, 0.224, 0.225];
 const CW = 244, CH = 340;                                  // carta enderezada (unidades de la homografia)
@@ -40,6 +44,7 @@ const SOLO_IMAGEN_MARGEN = 0.06;                           // ultimo recurso (si
 const SOLO_IMAGEN_TRAS_MS = 2500;                          // ... y solo despues de este tiempo sin poder leer texto
 
 let ort = null, sesion = null, indice = null, lector = null, letras = null, nombres = null;
+let lectorJa = null, nombresJa = null, cargandoJa = null;     // lector y nombres en japones
 let corriendo = false, video = null, flujo = null, alResultado = null, alEstado = null;
 let estado = nuevoEstado();
 const lienzo = document.createElement("canvas");
@@ -79,26 +84,36 @@ function cargarScript(src, global) {
   });
 }
 
-async function prepararLector() {
+async function crearLector(cual) {
   const [s, txt] = await Promise.all([
-    ort.InferenceSession.create(OCR.modelo, { executionProviders: ["wasm"], graphOptimizationLevel: "all" }),
-    fetch(OCR.dicc).then((r) => r.text()),
+    ort.InferenceSession.create(cual.modelo, { executionProviders: ["wasm"], graphOptimizationLevel: "all" }),
+    fetch(cual.dicc).then((r) => r.text()),
   ]);
-  letras = ["", ...txt.split("\n").filter((l, i, a) => i < a.length - 1 || l !== ""), " "];   // 0 = vacio (CTC), al final el espacio
-  return s;
+  const l = ["", ...txt.replace(/\r/g, "").split("\n").filter((x, i, a) => i < a.length - 1 || x !== ""), " "];   // 0 = vacio (CTC), al final el espacio
+  return { s, letras: l };
+}
+async function prepararLector() {
+  const r = await crearLector(OCR);
+  letras = r.letras;
+  return r.s;
+}
+function cargarJapones() {                                     // en segundo plano; si falla, el escaner sigue igual
+  if (!cargandoJa) cargandoJa = crearLector(OCR_JA).then((r) => { lectorJa = r; anotar("lector-ja", "listo"); }).catch((e) => { anotar("lector-ja", String(e)); cargandoJa = null; });
+  return cargandoJa;
 }
 
 // Una linea de texto (ImageData en grises, ya de OCR.alto pixeles de alto) -> {texto, confianza}
-async function leerLinea(im) {
+async function leerLinea(im, otro = null) {
+  const sesionL = otro ? otro.s : lector, letrasL = otro ? otro.letras : letras;
   const w = im.width, h = im.height, n = w * h, x = new Float32Array(3 * n), d = im.data;
   for (let i = 0; i < n; i++) { const v = d[i * 4] / 127.5 - 1; x[i] = v; x[n + i] = v; x[2 * n + i] = v; }
-  const out = Object.values(await lector.run({ x: new ort.Tensor("float32", x, [1, 3, h, w]) }))[0];
+  const out = Object.values(await sesionL.run({ x: new ort.Tensor("float32", x, [1, 3, h, w]) }))[0];
   const [, T, C] = out.dims, p = out.data;
   let texto = "", prev = 0, suma = 0, cuenta = 0;
   for (let t = 0; t < T; t++) {
     let m = 0, mv = -Infinity;
     for (let c = 0; c < C; c++) { const v = p[t * C + c]; if (v > mv) { mv = v; m = c; } }
-    if (m !== 0 && m !== prev) { texto += letras[m] ?? ""; suma += mv; cuenta++; }
+    if (m !== 0 && m !== prev) { texto += letrasL[m] ?? ""; suma += mv; cuenta++; }
     prev = m;
   }
   return { texto, confianza: cuenta ? suma / cuenta : 0 };
@@ -147,9 +162,12 @@ export async function preparar(progreso = () => {}) {
       }
     });
     nombres = prepararNombres(d.buscar);
+    nombresJa = [];
+    d.buscar.nombres.forEach((fila, grupo) => { for (const t of (fila[3] || "").split("|")) if (t.length >= 2) nombresJa.push({ t, grupo }); });
   }
   progreso("lector");
   lector = await prometeLector;
+  if (nombresJa.length) setTimeout(cargarJapones, 1500);        // listo antes de que alguien ponga una carta japonesa
 }
 
 // ---------------------------------------------------------------- orillas (mismo algoritmo que orillas.py del job)
@@ -375,11 +393,15 @@ function parecido(leido, nombre) {
   return mejor;
 }
 
-function emparejarNombre(texto) {
-  const leido = normalizar(texto);
-  if (leido.replace(/ /g, "").length < 3) return null;
+// Japones: sin espacios ni puntuacion (los nombres se guardan igual en el indice)
+const limpiarJa = (t) => String(t || "").normalize("NFKC").replace(/[\s・･·、。,.:：'"「」『』()（）\-ー―−]/g, (c) => (c === "ー" ? c : ""));
+
+function emparejarNombre(texto, ja = false) {
+  const leido = ja ? limpiarJa(texto) : normalizar(texto);
+  if (leido.replace(/ /g, "").length < (ja ? 2 : 3)) return null;
+  if (ja && !/[\u3040-\u30ff\u3400-\u9fff]/.test(leido)) return null;   // sin kana ni kanji no es un nombre japones
   const porGrupo = new Map();                                   // mejor parecido por carta
-  for (const { t, grupo } of nombres) {
+  for (const { t, grupo } of ja ? nombresJa : nombres) {
     if (Math.abs(t.length - leido.length) > Math.max(6, leido.length * 0.5)) continue;
     const s = parecido(leido, t);
     if (s > 0.5 && s > (porGrupo.get(grupo) ?? 0)) porGrupo.set(grupo, s);
@@ -403,7 +425,7 @@ function emparejarNombre(texto) {
     };
     const v = empatados.map((g) => [g, vis(g)]).sort((x, y) => y[1] - x[1]);
     // si la imagen tampoco decide, gana el nombre que coincide completo (no solo una cara)
-    const exacto = empatados.find((g) => normalizar(datos().buscar.nombres[g][0]) === leido);
+    const exacto = ja ? null : empatados.find((g) => normalizar(datos().buscar.nombres[g][0]) === leido);
     grupo = v[0][1] - (v[1]?.[1] ?? -1) >= 0.03 ? v[0][0] : (exacto ?? v[0][0]);
   }
   const segundo = orden.find(([g]) => !empatados.includes(g))?.[1] ?? 0;
@@ -466,13 +488,13 @@ function edicionPorCodigo(texto, sids) {
   return puntos[0][0];
 }
 
-async function leerNombre(foto) {
+async function leerNombre(foto, otro = null) {
   const { img, W, H, c } = foto;
   const r = BANDA_NOMBRE, ancho = Math.round(OCR.alto * ((r.x1 - r.x0) * CW) / ((r.y1 - r.y0) * CH));
   const band = muestrear(img, W, H, c, r, ancho, OCR.alto);
   const t0 = performance.now();
-  const { texto, confianza } = await leerLinea(band);
-  anotar("ocr-nombre", Math.round(performance.now() - t0), texto, confianza.toFixed(2));
+  const { texto, confianza } = await leerLinea(band, otro);
+  anotar(otro ? "ocr-nombre-ja" : "ocr-nombre", Math.round(performance.now() - t0), texto, confianza.toFixed(2));
   if (depurar) { lienzoOcr.width = band.width; lienzoOcr.height = band.height; lienzoOcr.getContext("2d").putImageData(band, 0, 0); }
   return confianza >= 0.5 ? texto : "";
 }
@@ -540,7 +562,7 @@ async function leer(foto) {
       const g = await porReglas(foto);
       if (!corriendo || est !== estado) return;
       if (g != null) { fijar(g, "reglas"); return; }
-      // ultimo recurso (carta en japones, texto ilegible): solo imagen y con margen muy alto
+      // ultimo recurso (texto ilegible): solo imagen y con margen muy alto
       if (performance.now() - estado.desde > SOLO_IMAGEN_TRAS_MS) {
         const p = promedio(), top = p && mejores(p, 8);
         if (top) {
@@ -568,8 +590,12 @@ async function leer(foto) {
         if (f0.intentosCodigo % 2 === 1) return;                 // alterna: codigo, nombre, codigo, nombre...
       }
     }
-    const r = emparejarNombre(await leerNombre(foto));
+    let r = emparejarNombre(await leerNombre(foto));
     if (!corriendo || est !== estado) return;
+    if (!r && lectorJa) {                                          // no se leyo en letras latinas: probar en japones
+      r = emparejarNombre(await leerNombre(foto, lectorJa), true);
+      if (!corriendo || est !== estado) return;
+    }
     const fallo = () => { estado.fallidas++; };
     if (!r) { fallo(); return; }
     anotar("nombre", datos().buscar.nombres[r.grupo][0], r.s.toFixed(2), r.segundo.toFixed(2));

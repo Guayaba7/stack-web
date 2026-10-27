@@ -1,0 +1,22 @@
+{
+ "esquema": 1,
+ "generado": "2026-10-27T05:55:19+00:00",
+ "articulos": [
+  {
+   "slug": "2026-10-27-bienvenido-a-stack",
+   "titulo": "Bienvenido a Stack",
+   "resumen": "Qué es Stack, de dónde salen sus precios y cómo sacarle provecho desde el celular y desde la aplicación.",
+   "autor": "López. M",
+   "fecha": "2026-10-27",
+   "portada": "portada.jpg",
+   "etiquetas": [
+    "stack",
+    "guía"
+   ],
+   "idioma": "es",
+   "destacado": true,
+   "borrador": false,
+   "minutos": 1
+  }
+ ]
+}

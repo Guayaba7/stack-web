@@ -69,3 +69,17 @@ export async function impresion(k) {
   }
   return trozos.get(xx)[k] || null;
 }
+
+// Precio de una impresion (fila de buscar.json) en la fuente preferida, en pesos: {mxn, fuente}.
+// Filas: [k, set, num, acab, idioma, tcg_usd, fuentes, har_jpy, scg_usd, ck_usd] (las 3 ultimas, desde el esquema con tiendas).
+let porClave = null;
+export function filaDe(k) {
+  if (!porClave) { porClave = new Map(); for (const f of estado.buscar?.imp || []) porClave.set(f[0], f); }
+  return porClave.get(k) || null;
+}
+export function precioFila(fila, fuente) {
+  if (!fila) return { mxn: null, fuente: "tcg" };
+  const v = fuente === "har" ? yenAPesos(fila[7]) : fuente === "scg" ? aPesos(fila[8]) : fuente === "ck" ? aPesos(fila[9]) : null;
+  if (v != null && fuente !== "tcg") return { mxn: v, fuente };
+  return { mxn: aPesos(fila[5]), fuente: "tcg" };
+}

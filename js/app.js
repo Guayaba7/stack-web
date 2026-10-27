@@ -1,9 +1,12 @@
 // Arranque, rutas y pantallas. Rutas: #/ (inicio), #/?q=texto (resultados), #/c/<clave> (ficha).
 import { POR_GRUPO, ZONA, DATOS_URL } from "./config.js";
-import { cargar, datos, aPesos, yenAPesos, impresion } from "./datos.js";
+import { cargar, datos, aPesos, yenAPesos, impresion, filaDe as filaImp, precioFila } from "./datos.js";
 import { prepararIndice, buscar } from "./buscar.js";
 import { cargarIdioma, idiomaActual, t, pesos, moneda, fecha, fechaLarga, porcentaje } from "./i18n.js";
-import { leerAjustes, guardarAjustes, usdMxn } from "./ajustes.js";
+import { leerAjustes, guardarAjustes, usdMxn, fuentePreferida, FUENTES_PREF, NOMBRE_FUENTE } from "./ajustes.js";
+import { logoSvg } from "./logo.js";
+import { vistaLegal } from "./legal.js";
+import * as art from "./articulos.js";
 import * as escaner from "./escaner.js";
 import * as scry from "./scryfall.js";
 import * as cv from "./cuenta_vistas.js";
@@ -23,6 +26,12 @@ const miniatura = (k) => {
   const sid = k.split(":")[0];
   return `https://cards.scryfall.io/small/front/${sid[0]}/${sid[1]}/${sid}.jpg`;
 };
+const ICONO_LUPA = `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/></svg>`;
+// precio grande de una fila (fuente preferida; si esa tienda no tiene la carta, TCG)
+function precioHtml(fila) {
+  const p = precioFila(fila, fuentePreferida());
+  return `<div class="precio num">${pesos(p.mxn)}</div><div class="tiendas${p.fuente !== fuentePreferida() ? " otra" : ""}">${NOMBRE_FUENTE[p.fuente]}</div>`;
+}
 const hoyMexico = () => new Intl.DateTimeFormat("en-CA", { timeZone: ZONA }).format(new Date());
 const diasEntre = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
 
@@ -53,8 +62,9 @@ function estadoDelDia() {
 
 function buscador(q = "") {
   return `<form class="buscador" role="search" onsubmit="return false">
-      <input id="q" type="text" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false"
-             placeholder="${esc(t("buscar.placeholder"))}" value="${esc(q)}" aria-label="${esc(t("buscar.placeholder"))}">
+      <span class="lupa">${ICONO_LUPA}</span>
+      <input id="q" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false"
+             value="${esc(q)}" aria-label="${esc(t("buscar.placeholder"))}">
       <button type="button" class="borrar" aria-label="${esc(t("buscar.borrar"))}" ${q ? "" : "hidden"}>✕</button>
       ${datos().manifest?.vision ? `<a class="camara" href="#/escaner" aria-label="${esc(t("escaner.abrir"))}">${ICONO_CAMARA}</a>` : ""}
     </form>`;
@@ -76,9 +86,10 @@ function vistaMovers() {
   const items = mv[pestanaMovers] || [];
   const filas = items.map((x) => {
     const sub = `${x.set.toUpperCase()} #${x.num} · ${t(`acabado.${x.acab}`)}`;
+    const pm = precioFila(filaImp(x.k) || [x.k, , , , , x.usd], fuentePreferida());
     const der = pestanaMovers === "nuevas"
-      ? `<div class="precio num">${pesos(aPesos(x.usd))}</div><div class="sub">${esc(t("movers.nuevas_dias", { n: x.dias }))}</div>`
-      : `<div class="precio num">${pesos(aPesos(x.usd))}</div><div class="sub num ${x.pct > 0 ? "sube" : "baja"}">${porcentaje(x.pct)}</div>`;
+      ? `<div class="precio num">${pesos(pm.mxn)}</div><div class="sub">${esc(t("movers.nuevas_dias", { n: x.dias }))}</div>`
+      : `<div class="precio num">${pesos(pm.mxn)}</div><div class="sub num ${x.pct > 0 ? "sube" : "baja"}">${porcentaje(x.pct)}</div>`;
     return filaDe(x.k, x.nombre, sub, der);
   }).join("");
   return `<h2>${esc(t("movers.titulo"))}</h2>
@@ -100,7 +111,7 @@ function vistaResultados(q) {
       const [k, set, num, acab, idioma, usd, fuentes] = b.imp[i];
       const tiendas = [...(fuentes || "")].map((l) => LETRAS[l]).join(" · ");
       const sub = `${set.toUpperCase()} #${num} · ${t(`acabado.${acab}`)} · ${idioma.toUpperCase()}`;
-      return filaDe(k, sub, tiendas || " ", `<div class="precio num">${pesos(aPesos(usd))}</div><div class="tiendas">TCG</div>`);
+      return filaDe(k, sub, tiendas || " ", precioHtml(b.imp[i]));
     }).join("");
     const faltan = g.imp.length - visibles.length;
     const cuantas = g.imp.length === 1 ? t("resultados.impresion") : t("resultados.impresiones", { n: g.imp.length });
@@ -111,13 +122,14 @@ function vistaResultados(q) {
 }
 
 // ---------- Ficha de una impresion ----------
-function filaPrecio(nombre, bloque, mxn, original, extra = "") {
-  if (!bloque) return `<tr><td class="fuente">${esc(nombre)}</td><td class="der tenue">${esc(t("ficha.sin_dato"))}</td></tr>`;
-  if (bloque.estado === "sin_match") return `<tr><td class="fuente">${esc(nombre)}</td><td class="der tenue">${esc(t("ficha.sin_match"))}</td></tr>`;
+function filaPrecio(nombre, bloque, mxn, original, extra = "", clave = "") {
+  const tr = `<tr${clave && clave === fuentePreferida() ? ' class="preferida"' : ""}>`;
+  if (!bloque) return `${tr}<td class="fuente">${esc(nombre)}</td><td class="der tenue">${esc(t("ficha.sin_dato"))}</td></tr>`;
+  if (bloque.estado === "sin_match") return `${tr}<td class="fuente">${esc(nombre)}</td><td class="der tenue">${esc(t("ficha.sin_match"))}</td></tr>`;
   const viejo = bloque.estado === "previo";
   const stock = bloque.stock == null ? "" : bloque.stock > 0 ? t("ficha.stock", { n: bloque.stock }) : `<span class="agotado">${esc(t("ficha.agotado"))}</span>`;
   const det = [stock, viejo ? `<span class="viejo">${esc(t("ficha.del", { dia: fecha(bloque.dia) }))}</span>` : "", extra].filter(Boolean).join(" · ");
-  return `<tr><td><div class="fuente">${esc(nombre)}</div>${det ? `<div class="detalle">${det}</div>` : ""}</td>
+  return `${tr}<td><div class="fuente">${esc(nombre)}</div>${det ? `<div class="detalle">${det}</div>` : ""}</td>
     <td class="der"><div class="mxn num ${viejo ? "viejo" : ""}">${pesos(mxn)}</div><div class="detalle num">${original}${bloque.cond ? ` ${esc(bloque.cond)}` : ""}</div></td></tr>`;
 }
 
@@ -160,11 +172,11 @@ async function vistaFicha(k) {
       <table class="precios">
         <thead><tr><th>${esc(t("ficha.fuente"))}</th><th class="der">${esc(t("ficha.precio"))}</th></tr></thead>
         <tbody>
-          ${filaPrecio(t("ficha.tcg"), tcg, aPesos(tcg.usd), moneda(tcg.usd, "USD"), cambios)}
-          ${filaPrecio(t("ficha.har"), f.har, yenAPesos(f.har?.jpy), moneda(f.har?.jpy, "JPY"))}
+          ${filaPrecio(t("ficha.tcg"), tcg, aPesos(tcg.usd), moneda(tcg.usd, "USD"), cambios, "tcg")}
+          ${filaPrecio(t("ficha.har"), f.har, yenAPesos(f.har?.jpy), moneda(f.har?.jpy, "JPY"), "", "har")}
           ${f.har_jp ? filaPrecio(t("ficha.har_jp"), f.har_jp, yenAPesos(f.har_jp.jpy), moneda(f.har_jp.jpy, "JPY")) : ""}
-          ${filaPrecio(t("ficha.scg"), f.scg, aPesos(f.scg?.usd), moneda(f.scg?.usd, "USD"))}
-          ${filaPrecio(t("ficha.ck"), ck, aPesos(ck?.usd), moneda(ck?.usd, "USD"), compra)}
+          ${filaPrecio(t("ficha.scg"), f.scg, aPesos(f.scg?.usd), moneda(f.scg?.usd, "USD"), "", "scg")}
+          ${filaPrecio(t("ficha.ck"), ck, aPesos(ck?.usd), moneda(ck?.usd, "USD"), compra, "ck")}
         </tbody>
       </table>
       <div class="pie num">${esc(t("ficha.cambio", { usd: `${usdMxn(m).valor ?? "—"}${usdMxn(m).propio ? ` (${t("ajustes.propio_corto")})` : ""}`, jpy: m.tc?.jpy_usd ?? "—" }))}<br>${esc(t("estado.datos_del", { dia: fecha(datos().diaUsado) }))}</div>
@@ -249,6 +261,10 @@ function leerRuta() {
   if (h.startsWith("/inv/")) return { pantalla: "inventario", id: decodeURIComponent(h.slice(5)) };
   if (h.startsWith("/inv")) return { pantalla: "inventarios" };
   if (h.startsWith("/watch")) return { pantalla: "watchlist" };
+  if (h.startsWith("/privacidad")) return { pantalla: "privacidad" };
+  if (h.startsWith("/articulos")) return { pantalla: "articulos" };
+  if (h.startsWith("/a/")) return { pantalla: "articulo", slug: decodeURIComponent(h.slice(3)) };
+  if (h.startsWith("/terminos")) return { pantalla: "terminos" };
   const q = new URLSearchParams(h.split("?")[1] || "").get("q") || "";
   return { pantalla: "inicio", q };
 }
@@ -257,18 +273,21 @@ function leerRuta() {
 const esPortada = (q) => q.trim().length < 2;
 
 function vistaPortadaExtra() {
-  if (!datos().movers) return "";
+  const articulos = `<section class="art-seccion" id="art-portada"></section>`;
+  if (!datos().movers) return articulos;
   return `<button type="button" class="ver-movers" data-ver-movers aria-expanded="${moversAbiertos}">${esc(t("movers.titulo"))} ${moversAbiertos ? "▴" : "▾"}</button>
-    ${moversAbiertos ? `<div class="movers-portada">${vistaMovers()}</div>` : ""}`;
+    ${moversAbiertos ? `<div class="movers-portada">${vistaMovers()}</div>` : ""}${articulos}`;
 }
+const llenarArticulos = () => art.seccionPortada(document.getElementById("art-portada"));
 
 function pintarInicio(q) {
   const portada = esPortada(q);
   document.body.classList.toggle("en-portada", portada);
   app.innerHTML = portada
-    ? `<section class="portada"><img class="logo-grande" src="iconos/logo-grande.png" alt=""><h1 class="nombre">Stack</h1>
+    ? `<section class="portada">${logoSvg("logo-grande", 132)}<h1 class="nombre">Stack</h1>
         ${buscador(q)}${estadoDelDia()}${cv.accesosPortada()}</section><div id="contenido">${vistaPortadaExtra()}</div>`
     : `${buscador(q)}${estadoDelDia()}<div id="contenido">${vistaResultados(q)}</div>`;
+  if (portada) llenarArticulos();
   const input = document.getElementById("q");
   if (matchMedia("(min-width: 720px)").matches || q) {
     input.focus();
@@ -281,6 +300,7 @@ function actualizarResultados(q) {
   if (esPortada(q) !== document.body.classList.contains("en-portada")) { pintarInicio(q); return; }
   const cont = document.getElementById("contenido");
   if (cont) cont.innerHTML = esPortada(q) ? vistaPortadaExtra() : vistaResultados(q);
+  if (esPortada(q)) llenarArticulos();
   const borrar = document.querySelector(".borrar");
   if (borrar) borrar.hidden = !q;
 }
@@ -329,12 +349,17 @@ function pantallaCuenta(r) {
   else if (r.pantalla === "inventarios") cv.vistaInventarios(app);
   else if (r.pantalla === "inventario") cv.vistaInventario(app, r.id);
   else if (r.pantalla === "watchlist") cv.vistaWatchlist(app);
+  else if (r.pantalla === "privacidad" || r.pantalla === "terminos") vistaLegal(app, r.pantalla);
+  else if (r.pantalla === "articulos") art.vistaArticulos(app);
+  else if (r.pantalla === "articulo") art.vistaArticulo(app, r.slug);
   else return false;
   return true;
 }
 
-window.addEventListener("hashchange", () => {
+window.addEventListener("hashchange", (ev) => {
   navegoDentro = true;
+  cv.recordarOrigen(ev.oldURL, location.hash);
+  document.title = "Stack";
   const r = leerRuta();
   if (r.pantalla !== "escaner") salirEscaner();
   if (r.pantalla === "escaner") vistaEscaner();
@@ -357,8 +382,7 @@ function salirEscaner() {
 }
 
 function precioRapido(fila) {
-  const [, , , , , usd] = fila;
-  return pesos(aPesos(usd));
+  return pesos(precioFila(fila, fuentePreferida()).mxn);
 }
 
 async function pintarResultado(panel, res, elegido = null) {
@@ -375,7 +399,7 @@ async function pintarResultado(panel, res, elegido = null) {
   panel.innerHTML = `<a class="res-fila" href="#/c/${encodeURIComponent(k)}">
       <img src="${miniatura(k)}" alt="">
       <div class="medio"><div class="titulo">${esc(nombre)}</div><div class="sub">${esc(set.toUpperCase())} #${esc(num)} · ${esc(t(`acabado.${acab}`))}</div></div>
-      <div class="der"><div class="res-precio num">${precioRapido(fila)}</div><div class="tiendas">TCG</div></div></a>
+      <div class="der"><div class="res-precio num">${precioRapido(fila)}</div><div class="tiendas">${NOMBRE_FUENTE[precioFila(fila, fuentePreferida()).fuente]}</div></div></a>
     <div class="res-tiendas num" id="res-tiendas"></div>
     <div class="res-acabados">${acabados}</div>${otras}`;
   panel.hidden = false;
@@ -459,6 +483,11 @@ function pintarAjustes() {
       <div class="hoja-cabeza"><h2>${esc(t("ajustes.titulo"))}</h2>
         <button type="button" class="cerrar" data-cerrar aria-label="${esc(t("ajustes.cerrar"))}">✕</button></div>
       <fieldset>
+        <legend>${esc(t("ajustes.fuente"))}</legend>
+        <div class="segmentos">${FUENTES_PREF.map((f) => `<label><input type="radio" name="fuente" value="${f}" ${fuentePreferida() === f ? "checked" : ""}><span>${esc(t(`ajustes.fuente_${f}`))}</span></label>`).join("")}</div>
+        <p class="tenue nota">${esc(t("ajustes.fuente_nota"))}</p>
+      </fieldset>
+      <fieldset>
         <legend>${esc(t("ajustes.usd_mxn"))}</legend>
         <label class="opcion"><input type="radio" name="modo" value="dia" ${a.usd_modo !== "propio" ? "checked" : ""}>
           <span>${esc(t("ajustes.del_dia"))}<span class="tenue num"> · ${delDia ?? "—"}${m?.tc?.dia ? ` (${esc(fecha(m.tc.dia))})` : ""}</span></span></label>
@@ -469,6 +498,7 @@ function pintarAjustes() {
         <p class="tenue nota">${esc(t("ajustes.nota_jpy", { jpy: m?.tc?.jpy_usd ?? "—" }))}</p>
       </fieldset>
       <button type="submit" class="guardar">${esc(t("ajustes.guardar"))}</button>
+      <div class="legales"><a href="#/privacidad" data-cerrar>${esc(t("legal.privacidad"))}</a><a href="#/terminos" data-cerrar>${esc(t("legal.terminos"))}</a></div>
     </form>`;
   const campo = hoja.querySelector("[name=propio]");
   const sync = () => { campo.disabled = hoja.querySelector("[name=modo]:checked").value !== "propio"; };
@@ -492,10 +522,10 @@ hoja.addEventListener("submit", (e) => {
   const modo = f.get("modo");
   const propio = Number(String(f.get("propio") || "").replace(",", "."));
   if (modo === "propio" && !(propio > 0)) { hoja.querySelector("[name=propio]").focus(); return; }
-  guardarAjustes({ usd_modo: modo, usd_propio: propio > 0 ? propio : null });
+  guardarAjustes({ usd_modo: modo, usd_propio: propio > 0 ? propio : null, fuente: f.get("fuente") || "tcg" });
   hoja.close();
   const r = leerRuta();
-  if (r.pantalla === "ficha") vistaFicha(r.k); else pintarInicio(r.q);
+  if (r.pantalla === "ficha") vistaFicha(r.k); else if (!pantallaCuenta(r)) pintarInicio(r.q);
 });
 
 function marcarIdioma() {
