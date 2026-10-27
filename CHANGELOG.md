@@ -2,6 +2,38 @@
 
 All notable changes to the Stack web application are documented in this file.
 
+## 2026-10-26 — Accounts, shared themes, inventories and watchlist
+
+### Added
+- **End-to-end encrypted accounts** (`js/cuenta.js`), backed by the new `stack-cuentas` Cloudflare Worker. All encryption
+  happens in the browser; the server receives only a hash of the username, a derived sign-in key and encrypted blobs.
+  The full specification is in `stack-cuentas/PROTOCOL.md`.
+  - Create account with username and password (no email). A recovery code is shown once, with copy and download
+    options, and must be confirmed as saved before continuing. The user must acknowledge that data cannot be recovered
+    without the password or the recovery code.
+  - Sign in, optionally remembered on the device; sign out.
+  - Recover the account with the recovery code (sets a new password, keeps all data, closes other sessions).
+  - Change the password with an open session, generate a new recovery code, delete the account.
+- **Stack themes on the web** (`css/temas.css`, `js/temas.js`): the 16 themes of the desktop application (GRN, VLT, GRY,
+  RED, RNB, NVD, HLW, SNV, ALG, SOL, DREAM, PLASMA, GRID, CONTOUR, GALAXY and PER), copied from S-0.6.7-BETA, including
+  animated colors (RNB, SOL, DREAM, GALAXY), full-screen animated backgrounds (GALAXY, PLASMA, CONTOUR, GRID) and the
+  custom theme colors. The theme is read from the account profile written by the application. **Themes cannot be
+  selected on the web**; signed-out visitors see the default green theme. The application's animation setting and the
+  system's reduced-motion preference are respected.
+- **Inventories** (`#/inv`, `#/inv/<id>`): every inventory in the account, with total value today (TCG reference in MXN),
+  acquisition cost and card count; each inventory lists its cards sorted by value, with a text filter and links to the
+  card page. Cards without a price today (below USD 2) are counted separately.
+- **Watchlist** (`#/watch`): tracked printings with today's price and the state of each price alert.
+- Account button in the header; shortcuts to Inventories and Watchlist on the landing page when signed in.
+
+### Changed
+- Web colors are now mapped from the Stack theme variables (`--bg`, `--txt`, `--acc`…) instead of fixed values.
+- Service worker `stack-pagina-v8` caches the new scripts and styles.
+
+### Configuration
+- `js/config.js` → `CUENTAS_PUBLICO` points to the deployed Worker (`stack-cuentas.lopezmendeze77.workers.dev`). If it
+  is left empty, the account button is hidden.
+
 ## 2026-10-26 — Text-verified scanner and card details
 
 ### Added

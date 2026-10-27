@@ -1,21 +1,23 @@
 /* Stack web: tema oscuro, movil primero. Colores en un solo lugar. */
-:root {
-  --fondo: #0b0d0c;
-  --panel: #141816;
-  --linea: #232a26;
-  --texto: #e7ece9;
-  --tenue: #8d9a93;
-  --verde: #3ddc84;
-  --ambar: #f2b33d;
-  --rojo: #ef5b5b;
-  --sube: #3ddc84;
-  --baja: #ef5b5b;
+/* Los colores vienen del tema de Stack (css/temas.css). Aqui solo se traducen a los nombres de la web.
+   Van en body (no en :root) porque cada tema cambia las variables en body. */
+body {
+  --fondo: var(--bg);
+  --linea: var(--line);
+  --texto: var(--txt);
+  --tenue: var(--dim);
+  --verde: var(--acc);
+  --ambar: var(--amb);
+  --rojo: var(--malo);
+  --sube: var(--bueno);
+  --baja: var(--malo);
   --radio: 10px;
   color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; background: var(--fondo); color: var(--texto); }
+html, body { margin: 0; }
+body { background: var(--fondo); color: var(--texto); }
 body {
   font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   -webkit-text-size-adjust: 100%;
@@ -160,7 +162,7 @@ h2 { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: v
 .nota { font-size: 13px; margin: 12px 0 0; }
 .guardar {
   width: 100%; min-height: 48px; margin-top: 16px; border: 0; border-radius: 10px;
-  background: var(--verde); color: #04140b; font-weight: 700; cursor: pointer;
+  background: var(--verde); color: var(--bg); font-weight: 700; cursor: pointer;
 }
 
 /* Portada (como el dibujo): logo grande, nombre y buscador al centro */
@@ -176,6 +178,41 @@ body.en-portada .barra { border-bottom-color: transparent; }
   border: 1px solid var(--linea); background: transparent; color: var(--tenue); cursor: pointer;
 }
 .movers-portada { margin-top: 4px; }
+
+/* Cuenta */
+.idiomas a.engrane { min-width: 44px; min-height: 36px; border-radius: 8px; border: 1px solid var(--linea); color: var(--tenue); display: grid; place-items: center; }
+.idiomas a.engrane[hidden] { display: none; }
+.idiomas a.engrane.activo { color: var(--verde); border-color: var(--verde); }
+.cuenta h1, .cuenta-codigo h1, .titulo-vista { font-size: 24px; margin: 8px 0 12px; }
+.form-cuenta { display: grid; gap: 12px; margin-top: 8px; }
+.form-cuenta label { display: grid; gap: 6px; font-size: 14px; color: var(--tenue); }
+.form-cuenta input:not([type=checkbox]) {
+  height: 48px; padding: 0 12px; font-size: 17px; border-radius: 10px; border: 1px solid var(--linea);
+  background: var(--panel); color: var(--texto); outline: none;
+}
+.form-cuenta input:focus { border-color: var(--verde); }
+.form-cuenta label.check { display: flex; align-items: flex-start; gap: 10px; color: var(--texto); }
+.form-cuenta label.check input { width: 20px; height: 20px; accent-color: var(--verde); flex: none; margin-top: 1px; }
+.primario { min-height: 48px; border: 0; border-radius: 10px; background: var(--verde); color: var(--bg); font-weight: 700; cursor: pointer; padding: 0 18px; }
+.primario:disabled { opacity: .5; }
+.peligro { color: var(--rojo) !important; border-color: color-mix(in srgb, var(--rojo) 45%, transparent) !important; }
+.primario.peligro { background: var(--rojo); color: var(--bg) !important; }
+.enlace { background: none; border: 0; color: var(--verde); min-height: 40px; cursor: pointer; }
+.nota { font-size: 13px; color: var(--tenue); margin: 0; }
+.error { color: var(--rojo); font-size: 14px; margin: 0; min-height: 1em; }
+.aviso-cuenta { font-size: 14px; padding: 10px 12px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--ambar) 45%, transparent); color: var(--ambar); }
+.cuenta-codigo { display: grid; gap: 14px; }
+.codigo { font-size: 22px; letter-spacing: .06em; text-align: center; padding: 18px 10px; border: 2px dashed var(--verde); border-radius: 12px; background: var(--panel); line-height: 1.6; }
+.codigo span { white-space: nowrap; }
+.cuenta-codigo .enlaces button, .cuenta .enlaces button { min-height: 44px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--linea); background: transparent; color: var(--texto); cursor: pointer; }
+.accesos { display: flex; gap: 8px; justify-content: center; margin-top: 14px; flex-wrap: wrap; }
+.accesos a { min-height: 40px; display: inline-flex; align-items: center; padding: 0 16px; border-radius: 999px; border: 1px solid var(--linea); text-decoration: none; color: var(--verde); }
+.cuenta .accesos { justify-content: flex-start; }
+.resumen { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.resumen > div { background: var(--panel); border: 1px solid var(--linea); border-radius: var(--radio); padding: 10px; display: grid; gap: 2px; }
+.resumen span { font-size: 12px; }
+.resumen b { font-size: 17px; }
+.boton-vacio { display: inline-flex; margin-top: 12px; min-height: 44px; align-items: center; padding: 0 18px; border-radius: 8px; border: 1px solid var(--linea); text-decoration: none; color: var(--verde); }
 
 /* Detalles de la carta (despues de los precios) */
 .detalles { margin-top: 8px; }

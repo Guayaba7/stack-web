@@ -1,0 +1,107 @@
+/* Temas de Stack: copiados tal cual de la app (S-0.6.7-BETA) para que la web se vea igual que la app.
+   En la web no se elige tema: se usa el que la persona tiene en su cuenta (lo elige en la app).
+   Variables de la app: --bg --panel --line --txt --dim --acc --amb --sel --err --hi --bueno --malo ...
+   La hoja app.css traduce estas variables a las de la web (--fondo, --texto, --verde...). */
+:root,body[data-tema="GRN"]{--bg:#0a0e0b;--panel:#0e1410;--line:#24352a;--txt:#c9d6c6;--dim:#6f8572;--acc:#3ddc84;--amb:#f0b429;--sel:#13301f;--err:#ff6b6b;--hi:#e9f5e6;
+  --foil:#9ad1ff;--etched:#d6a8ff;--har:#f2a7c3;--grid:#1c2a21;--sel2:#0f1f15;--selline:#2f5a3f;--edit:#0f1a13;--bueno:#3ddc84;--malo:#ff6b6b}
+body[data-tema="VLT"]{--bg:#0d0a12;--panel:#130e1a;--line:#2f2440;--txt:#d6cce4;--dim:#83729a;--acc:#b388ff;--amb:#ffcf6e;--sel:#251a3a;--err:#ff6b8b;--hi:#f5efff;
+  --foil:#8fd3ff;--etched:#ff9de2;--har:#7ee0c3;--grid:#211a2e;--sel2:#1a1228;--selline:#5a3f80;--edit:#170f22;--bueno:#7ee0a1;--malo:#ff6b8b}
+body[data-tema="GRY"]{--bg:#0c0c0c;--panel:#131313;--line:#2e2e2e;--txt:#cfcfcf;--dim:#7c7c7c;--acc:#f0f0f0;--amb:#b8b8b8;--sel:#2a2a2a;--err:#ff7a7a;--hi:#ffffff;
+  --foil:#b4c8d8;--etched:#cbbfd8;--har:#d9c3cb;--grid:#1f1f1f;--sel2:#1b1b1b;--selline:#575757;--edit:#171717;--bueno:#8fd19e;--malo:#ff7a7a}
+body[data-tema="RED"]{--bg:#100909;--panel:#170d0d;--line:#3a2222;--txt:#e6d2d2;--dim:#977271;--acc:#ff5252;--amb:#ffb04f;--sel:#3a1414;--err:#ffd166;--hi:#fff1f1;
+  --foil:#9ad1ff;--etched:#ffa6d9;--har:#ff9e7a;--grid:#2a1717;--sel2:#241010;--selline:#7a2a2a;--edit:#1d0e0e;--bueno:#7ee787;--malo:#ffd166}
+body[data-tema="RNB"]{--bg:#0b0b10;--panel:#11111a;--line:#2a2a3c;--txt:#dadaea;--dim:#7f7f9c;--acc:#4dd0e1;--amb:#ffd54f;--sel:#1e1e36;--err:#ff5c7a;--hi:#ffffff;
+  --foil:#82b1ff;--etched:#ea80fc;--har:#ff8a80;--grid:#1b1b28;--sel2:#16162a;--selline:#4a4a7a;--edit:#14141f;
+  --r1:#ff5c7a;--r2:#ffa64d;--r3:#ffd54f;--r4:#7ee787;--r5:#4dd0e1;--r6:#82b1ff;--r7:#ea80fc;--bueno:#7ee787;--malo:#ff5c7a}
+body[data-tema="NVD"]{--bg:#08130d;--panel:#0d1d14;--line:#22412e;--txt:#e8f0e6;--dim:#86a08c;--acc:#e5383b;--amb:#f4c542;--sel:#3b1517;--err:#ff7b54;--hi:#ffffff;
+  --foil:#9fe0ff;--etched:#f4c542;--har:#ff9fb0;--grid:#16301f;--sel2:#2a1214;--selline:#8a2a2e;--edit:#0f2018;--bueno:#5ee08a;--malo:#ff6161}
+body[data-tema="HLW"]{--bg:#0c0810;--panel:#140d18;--line:#3a2547;--txt:#efe3d0;--dim:#8f7a8f;--acc:#ff7a1a;--amb:#a6ff3d;--sel:#2e1838;--err:#ff4d6d;--hi:#fff6e8;
+  --foil:#c48bff;--etched:#a6ff3d;--har:#ff9de2;--grid:#22142a;--sel2:#1f1226;--selline:#6b3c80;--edit:#170f1d;--bueno:#a6ff3d;--malo:#ff4d6d}
+body[data-tema="SNV"]{--bg:#14070c;--panel:#1d0b13;--line:#4a1e30;--txt:#f6dde6;--dim:#a87b8d;--acc:#ff4f8b;--amb:#ffc2d6;--sel:#3d1426;--err:#ffd166;--hi:#fff2f6;
+  --foil:#b9d9ff;--etched:#ffb3c7;--har:#ff9e9e;--grid:#2c1020;--sel2:#2a0f1b;--selline:#8a2c50;--edit:#1f0a14;--bueno:#7be3b0;--malo:#ffd166}
+body[data-tema="ALG"]{--bg:#fff4fa;--panel:#fde8f3;--line:#f2cde2;--txt:#5a4060;--dim:#a587a6;--acc:#ff5fae;--amb:#2ea9e8;--sel:#ffd9ee;--err:#e0407a;--hi:#3a2340;
+  --foil:#2ea9e8;--etched:#a46cf5;--har:#cf4fa7;--grid:#fbe3ef;--sel2:#fde1f0;--selline:#ffa6d2;--edit:#fffafd;--bueno:#1f9e7c;--malo:#e0407a}
+/* RNB: el tono gira solo */
+@property --h{syntax:"<angle>";inherits:true;initial-value:0deg}
+@keyframes rgb{to{--h:360deg}}
+body[data-tema="RNB"]{animation:rgb 8s steps(80) infinite;
+  --txt:hsl(var(--h) 75% 78%);--hi:hsl(calc(var(--h) + 30deg) 95% 88%);--acc:hsl(calc(var(--h) + 120deg) 85% 66%);
+  --amb:hsl(calc(var(--h) + 200deg) 90% 70%);--dim:hsl(calc(var(--h) + 60deg) 25% 62%);--har:hsl(calc(var(--h) + 280deg) 85% 76%)}
+/* color animable de lo decorativo (pulso y ciclo) */
+@property --ani{syntax:"<color>";inherits:true;initial-value:#3ddc84}
+body{--ani:var(--acc)}
+@keyframes pulse{0%,100%{--ani:var(--pulso-a)}50%{--ani:var(--pulso-b)}}
+@keyframes cycle{0%,100%{--ani:var(--ciclo-1)}25%{--ani:var(--ciclo-2)}50%{--ani:var(--ciclo-3)}75%{--ani:var(--ciclo-4)}}
+body[data-tema="PER"]{animation:none!important}     /* el personalizado nunca se anima */
+body[data-tema="SOL"]{animation:pulse 3.2s steps(32) infinite;
+  --bg:#0d0900;--panel:#140e02;--txt:#f2c36b;--dim:#8f6c2c;--acc:#ffb000;--amb:#ffe066;--sel:#2a1d04;--err:#ff6a3d;--hi:#fff1c4;
+  --foil:#ffe9a8;--etched:#e0a050;--har:#ffcf8f;--grid:#1d1505;--sel2:#201603;--edit:#170f02;--bueno:#c8e05a;--malo:#ff6a3d;
+  --pulso-a:#5c3b00;--pulso-b:#ffd21a;
+  --line:color-mix(in srgb, var(--ani) 38%, #0d0900);--selline:color-mix(in srgb, var(--ani) 65%, #0d0900)}
+body[data-tema="DREAM"]{animation:cycle 12s steps(120) infinite;
+  --bg:#fcf6fb;--panel:#f6eef8;--line:#c7aed2;--txt:#3e3350;--dim:#62566f;--acc:#c2477f;--amb:#c4622a;--sel:#efe2f6;--err:#c93d5c;--hi:#24192f;
+  --foil:#3d7fc4;--etched:#8a55c9;--har:#7a4fc0;--grid:#e2d0e8;--sel2:#f3e9f8;--selline:#9c72b8;--edit:#fffbfe;--bueno:#1f8f6c;--malo:#c93d5c;
+  --ciclo-1:#c9467f;--ciclo-2:#7d5cc8;--ciclo-3:#cf6a2c;--ciclo-4:#1e8f6e}
+/* temas con fondo animado de pantalla completa (lo pinta js/temas.js en <canvas id="fondo">) */
+body[data-tema="PLASMA"]{--bg:#06030e;--panel:rgba(12,6,26,.80);--line:rgba(150,110,230,.42);--txt:#efe8fb;--dim:#b3a3d4;--acc:#d683ff;--amb:#ffc86b;
+  --sel:rgba(120,60,210,.42);--err:#ff6b9a;--hi:#ffffff;--foil:#8fd3ff;--etched:#ff9de2;--har:#ffaad6;--grid:rgba(110,80,180,.30);
+  --sel2:rgba(70,40,140,.34);--selline:#9a66e6;--edit:rgba(18,8,40,.72);--bueno:#7ee0a1;--malo:#ff6b8b}
+body[data-tema="GRID"]{--bg:#01030a;--panel:rgba(2,8,24,.82);--line:rgba(60,140,255,.45);--txt:#dbe9ff;--dim:#86a2cf;--acc:#3fa9ff;--amb:#9fd6ff;
+  --sel:rgba(30,100,230,.38);--err:#ff7a8a;--hi:#ffffff;--foil:#a8e6ff;--etched:#a9b8ff;--har:#80b8ff;--grid:rgba(40,100,200,.30);
+  --sel2:rgba(20,60,150,.32);--selline:#3d8bff;--edit:rgba(3,12,36,.74);--bueno:#7ee0a1;--malo:#ff7a8a}
+body[data-tema="CONTOUR"]{--bg:#010409;--panel:rgba(2,10,16,.82);--line:rgba(0,200,230,.36);--acc:#22e3ff;--sel:rgba(0,170,210,.30);
+  --grid:rgba(0,160,200,.22);--sel2:rgba(0,110,140,.28);--selline:#19b8d6;--edit:rgba(2,14,22,.74)}
+@property --gh{syntax:"<angle>";inherits:true;initial-value:0deg}
+@keyframes galaxia-h{to{--gh:360deg}}   /* GALAXY: el tono sale de sin(--gh), siempre dentro de la banda neon (cian..rosa) */
+body[data-tema="GALAXY"]{animation:galaxia-h 16s steps(160) infinite;background:transparent;
+  --bg:#04020b;--panel:rgba(13,7,30,.78);--line:rgba(140,110,255,.34);--txt:#ebe6ff;--dim:#a79ed0;--acc:#b48cff;--amb:#8fd3ff;
+  --sel:rgba(112,72,232,.36);--err:#ff6b9b;--hi:#ffffff;--foil:#9fd8ff;--etched:#ff9de2;--har:#c9a9ff;--grid:rgba(110,90,210,.26);
+  --sel2:rgba(70,40,150,.30);--selline:#8f6bff;--edit:rgba(16,8,40,.74);--bueno:#6ff0b0;--malo:#ff6b9b;
+  --ani:#b48cff;--ani:hsl(calc(252deg + 70deg * sin(var(--gh))) 100% 74%)}
+body[data-tema="PLASMA"],body[data-tema="GRID"],body[data-tema="CONTOUR"],body[data-tema="GALAXY"]{background:transparent}
+html{background:var(--bg)}
+body[data-tema="ALG"],body[data-tema="DREAM"]{color-scheme:light}
+
+/* ===== equivalentes en la web de los efectos de la app ===== */
+/* SOL y GRID: titulos que brillan como fosforo */
+body[data-tema="SOL"] .nombre,body[data-tema="SOL"] h1,body[data-tema="SOL"] h2,body[data-tema="SOL"] .marca{text-shadow:0 0 6px var(--ani),0 0 14px color-mix(in srgb, var(--ani) 45%, transparent)}
+body[data-tema="SOL"] .buscador input:focus,body[data-tema="SOL"] .chip-acab.activo{border-color:var(--ani)}
+body[data-tema="GRID"] .nombre,body[data-tema="GRID"] h2,body[data-tema="GRID"] .marca{text-shadow:0 0 6px rgba(63,169,255,.8)}
+/* RNB: cada renglon con su color, el tono corre como ola */
+body[data-tema="RNB"] .lista li:nth-child(12n+1) .titulo{color:hsl(calc(var(--h) + 0deg) 80% 76%)}
+body[data-tema="RNB"] .lista li:nth-child(12n+2) .titulo{color:hsl(calc(var(--h) + 30deg) 80% 76%)}
+body[data-tema="RNB"] .lista li:nth-child(12n+3) .titulo{color:hsl(calc(var(--h) + 60deg) 80% 76%)}
+body[data-tema="RNB"] .lista li:nth-child(12n+4) .titulo{color:hsl(calc(var(--h) + 90deg) 80% 76%)}
+body[data-tema="RNB"] .lista li:nth-child(12n+5) .titulo{color:hsl(calc(var(--h) + 120deg) 80% 76%)}
+body[data-tema="RNB"] .lista li:nth-child(12n+6) .titulo{color:hsl(calc(var(--h) + 150deg) 80% 76%)}
+body[data-tema="RNB"] .lista li:nth-child(12n+7) .titulo{color:hsl(calc(var(--h) + 180deg) 80% 76%)}
+body[data-tema="RNB"] .lista li:nth-child(12n+8) .titulo{color:hsl(calc(var(--h) + 210deg) 80% 76%)}
+body[data-tema="RNB"] .lista li:nth-child(12n+9) .titulo{color:hsl(calc(var(--h) + 240deg) 80% 76%)}
+body[data-tema="RNB"] .lista li:nth-child(12n+10) .titulo{color:hsl(calc(var(--h) + 270deg) 80% 76%)}
+body[data-tema="RNB"] .lista li:nth-child(12n+11) .titulo{color:hsl(calc(var(--h) + 300deg) 80% 76%)}
+body[data-tema="RNB"] .lista li:nth-child(12n) .titulo{color:hsl(calc(var(--h) + 330deg) 80% 76%)}
+body[data-tema="RNB"] .nombre,body[data-tema="RNB"] h2{background:linear-gradient(90deg,var(--r1),var(--r2),var(--r3),var(--r4),var(--r5),var(--r6),var(--r7));-webkit-background-clip:text;background-clip:text;color:transparent}
+/* DREAM: los renglones ciclan su color desfasados */
+body[data-tema="DREAM"] .lista li{animation:cycle 12s steps(120) infinite}
+body[data-tema="DREAM"] .lista li .titulo{color:var(--ani)}
+body[data-tema="DREAM"] .lista li:nth-child(12n+2){animation-delay:-1s} body[data-tema="DREAM"] .lista li:nth-child(12n+3){animation-delay:-2s}
+body[data-tema="DREAM"] .lista li:nth-child(12n+4){animation-delay:-3s} body[data-tema="DREAM"] .lista li:nth-child(12n+5){animation-delay:-4s}
+body[data-tema="DREAM"] .lista li:nth-child(12n+6){animation-delay:-5s} body[data-tema="DREAM"] .lista li:nth-child(12n+7){animation-delay:-6s}
+body[data-tema="DREAM"] .lista li:nth-child(12n+8){animation-delay:-7s} body[data-tema="DREAM"] .lista li:nth-child(12n+9){animation-delay:-8s}
+body[data-tema="DREAM"] .lista li:nth-child(12n+10){animation-delay:-9s} body[data-tema="DREAM"] .lista li:nth-child(12n+11){animation-delay:-10s}
+body[data-tema="DREAM"] .lista li:nth-child(12n){animation-delay:-11s}
+/* GALAXY: titulos y nombres ciclan por la banda neon */
+body[data-tema="GALAXY"] .nombre,body[data-tema="GALAXY"] h1,body[data-tema="GALAXY"] h2,body[data-tema="GALAXY"] .marca,body[data-tema="GALAXY"] .grupo-nombre{color:#c9a9ff;color:hsl(calc(252deg + 70deg * sin(var(--gh) + 40deg)) 100% 76%);
+  text-shadow:0 0 8px hsl(calc(252deg + 70deg * sin(var(--gh) + 40deg)) 100% 60% / .55),0 1px 2px rgba(0,0,0,.95)}
+body[data-tema="GALAXY"] .lista .titulo{color:#d9c8ff;color:hsl(calc(252deg + 70deg * sin(var(--gh) + var(--o, 0deg))) 100% 80%)}
+body[data-tema="GALAXY"] .lista li:nth-child(8n+2){--o:45deg} body[data-tema="GALAXY"] .lista li:nth-child(8n+3){--o:90deg}
+body[data-tema="GALAXY"] .lista li:nth-child(8n+4){--o:135deg} body[data-tema="GALAXY"] .lista li:nth-child(8n+5){--o:180deg}
+body[data-tema="GALAXY"] .lista li:nth-child(8n+6){--o:225deg} body[data-tema="GALAXY"] .lista li:nth-child(8n+7){--o:270deg}
+body[data-tema="GALAXY"] .lista li:nth-child(8n){--o:315deg}
+/* fondos animados: los textos sobre el canvas llevan sombra para leerse */
+body[data-tema="PLASMA"] main,body[data-tema="GRID"] main,body[data-tema="CONTOUR"] main,body[data-tema="GALAXY"] main{text-shadow:0 1px 2px rgba(0,0,0,.9)}
+#fondo{position:fixed;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none;display:none}
+
+/* apagar animaciones: opcion de la app o 'reducir movimiento' del sistema */
+body[data-anim="NO"],body[data-anim="NO"] *{animation:none!important}
+@media (prefers-reduced-motion: reduce){body,body *{animation:none!important}}

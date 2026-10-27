@@ -6,6 +6,7 @@ import { cargarIdioma, idiomaActual, t, pesos, moneda, fecha, fechaLarga, porcen
 import { leerAjustes, guardarAjustes, usdMxn } from "./ajustes.js";
 import * as escaner from "./escaner.js";
 import * as scry from "./scryfall.js";
+import * as cv from "./cuenta_vistas.js";
 
 const app = document.getElementById("app");
 const FUENTES = [["tcg", "TCG"], ["har", "HAR"], ["har_jp", "HAR JP"], ["scg", "SCG"], ["ck", "CK"]];
@@ -242,6 +243,10 @@ function leerRuta() {
   const h = location.hash.replace(/^#/, "") || "/";
   if (h.startsWith("/c/")) return { pantalla: "ficha", k: decodeURIComponent(h.slice(3)) };
   if (h.startsWith("/escaner")) return { pantalla: "escaner" };
+  if (h.startsWith("/cuenta")) return { pantalla: "cuenta" };
+  if (h.startsWith("/inv/")) return { pantalla: "inventario", id: decodeURIComponent(h.slice(5)) };
+  if (h.startsWith("/inv")) return { pantalla: "inventarios" };
+  if (h.startsWith("/watch")) return { pantalla: "watchlist" };
   const q = new URLSearchParams(h.split("?")[1] || "").get("q") || "";
   return { pantalla: "inicio", q };
 }
@@ -260,7 +265,7 @@ function pintarInicio(q) {
   document.body.classList.toggle("en-portada", portada);
   app.innerHTML = portada
     ? `<section class="portada"><img class="logo-grande" src="iconos/logo-grande.png" alt=""><h1 class="nombre">Stack</h1>
-        ${buscador(q)}${estadoDelDia()}</section><div id="contenido">${vistaPortadaExtra()}</div>`
+        ${buscador(q)}${estadoDelDia()}${cv.accesosPortada()}</section><div id="contenido">${vistaPortadaExtra()}</div>`
     : `${buscador(q)}${estadoDelDia()}<div id="contenido">${vistaResultados(q)}</div>`;
   const input = document.getElementById("q");
   if (matchMedia("(min-width: 720px)").matches || q) {
@@ -315,11 +320,23 @@ app.addEventListener("click", (e) => {
 });
 
 // Al cambiar de pantalla (ficha <-> inicio) se repinta completo.
+// Pantallas de la cuenta (inventarios, watchlist, entrar/crear)
+function pantallaCuenta(r) {
+  document.body.classList.remove("en-portada");
+  if (r.pantalla === "cuenta") cv.vistaCuenta(app);
+  else if (r.pantalla === "inventarios") cv.vistaInventarios(app);
+  else if (r.pantalla === "inventario") cv.vistaInventario(app, r.id);
+  else if (r.pantalla === "watchlist") cv.vistaWatchlist(app);
+  else return false;
+  return true;
+}
+
 window.addEventListener("hashchange", () => {
   navegoDentro = true;
   const r = leerRuta();
   if (r.pantalla !== "escaner") salirEscaner();
   if (r.pantalla === "escaner") vistaEscaner();
+  else if (pantallaCuenta(r)) { /* listo */ }
   else if (r.pantalla === "ficha" || !document.getElementById("q")) {
     if (r.pantalla === "inicio") pintarInicio(r.q); else vistaFicha(r.k);
   } else actualizarResultados(r.q);
@@ -424,8 +441,9 @@ document.querySelector(".idiomas").addEventListener("click", async (e) => {
   if (!b) return;
   await cargarIdioma(b.dataset.idioma);
   marcarIdioma();
+  cv.marcarBoton();
   const r = leerRuta();
-  if (r.pantalla === "ficha") vistaFicha(r.k); else pintarInicio(r.q);
+  if (r.pantalla === "ficha") vistaFicha(r.k); else if (!pantallaCuenta(r)) pintarInicio(r.q);
 });
 
 // ---------- Ajustes (engrane) ----------
@@ -490,9 +508,11 @@ async function iniciar() {
     const d = await cargar();
     prepararIndice(d.buscar);
     listo = true;
+    await cv.iniciarCuenta();                     // tema de la cuenta (si hay sesion) antes de pintar
     const r = leerRuta();
     if (r.pantalla === "ficha") vistaFicha(r.k);
     else if (r.pantalla === "escaner") { pintarInicio(""); vistaEscaner(); }
+    else if (pantallaCuenta(r)) { /* listo */ }
     else pintarInicio(r.q);
   } catch {
     const enLinea = navigator.onLine !== false;          // con internet: el problema es que no estan los archivos
