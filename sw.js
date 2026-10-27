@@ -1,7 +1,7 @@
 // Cache por dia: los archivos de un dia (.../AAAA-MM-DD/...) nunca cambian, asi que se guardan y no se vuelven a bajar.
 // manifest.json siempre se pregunta primero a la red (si no hay red, se usa el guardado).
 // La pagina en si (html, css, js, textos) se muestra de la cache y se actualiza en segundo plano.
-const PAGINA = "stack-pagina-v9";
+const PAGINA = "stack-pagina-v10";
 const DATOS = "stack-datos";
 const DIA = /\/(\d{4}-\d{2}-\d{2})\//;
 const ARCHIVOS_PAGINA = ["./", "index.html", "css/app.css", "js/app.js", "js/config.js", "js/datos.js",
