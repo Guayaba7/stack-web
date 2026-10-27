@@ -61,7 +61,7 @@
   "ajustes.del_dia": "Today's rate",
   "ajustes.propio": "Custom",
   "ajustes.propio_corto": "custom",
-  "ajustes.nota_jpy": "Yen to dollar (JPY→USD) always uses today's rate: {jpy}",
+  "ajustes.nota_jpy": "Yen to dollar (JPY→USD) always uses today's rate: {jpy}.",
   "ajustes.guardar": "Save",
   "ajustes.chip": "USD ${usd} custom",
   "escaner.abrir": "Scan card",
@@ -189,7 +189,7 @@
   "ajustes.fuente_har": "Hareruya",
   "ajustes.fuente_scg": "SCG",
   "ajustes.fuente_ck": "Card Kingdom",
-  "ajustes.fuente_nota": "It is the main price in searches, movers, scanner, inventories and watchlist. If that store does not have the card, TCG is shown. The card page always shows all of them.",
+  "ajustes.fuente_nota": "This is the price shown large in searches, movers, the scanner, inventories and the watchlist.",
   "legal.privacidad": "Privacy",
   "legal.terminos": "Terms",
   "cuenta.titulo": "Stack account",
@@ -206,5 +206,7 @@
   "art.minutos": "{n} min read",
   "art.vacio": "No articles have been published yet.",
   "art.no_existe": "This article no longer exists.",
-  "art.desde": "from"
+  "art.desde": "from",
+  "ajustes.fuente_nota2": "If that store does not have the card, TCG is used. Each card page always shows every store.",
+  "ajustes.nota_usd": "Use Custom if you buy at your own exchange rate. It is saved only on this device."
 }

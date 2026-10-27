@@ -15,6 +15,10 @@ Uso (desde la carpeta donde esta este archivo, o con las rutas completas):
     python publicar_articulos.py                 revisa y publica todo
     python publicar_articulos.py --revisar       solo revisa (no escribe nada)
     python publicar_articulos.py --ver           publica y abre la pagina en tu navegador para verla antes de subirla
+    python publicar_articulos.py --lista         muestra los articulos publicados y sus nombres
+    python publicar_articulos.py --quitar NOMBRE quita un articulo de la pagina (NOMBRE = su carpeta, p. ej.
+                                                 2026-10-27-bienvenido-a-stack). Su carpeta se mueve a articulos/_quitados
+                                                 para que no se vuelva a publicar; si la regresas, se publica otra vez.
     python publicar_articulos.py --fuente D:\\MTG\\articulos --destino D:\\MTG\\stack-web\\articulos
 
 Formato completo y ejemplos: MANUAL_ARTICULOS.md. Solo usa la libreria estandar de Python; si tienes Pillow
@@ -328,6 +332,56 @@ def publicar(fuente, destino, solo_revisar=False):
     return errores
 
 
+def indice_de(destino):
+    """Rehace indice.json con lo que ya esta publicado en DESTINO (sin volver a leer la fuente)."""
+    arts = []
+    for d in sorted(p for p in destino.iterdir() if p.is_dir()) if destino.is_dir() else []:
+        try:
+            a = json.loads((d / "articulo.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        arts.append({k: v for k, v in a.items() if k != "html"})
+    arts.sort(key=lambda a: (a["fecha"], a["titulo"]), reverse=True)
+    destino.mkdir(parents=True, exist_ok=True)
+    (destino / "indice.json").write_text(json.dumps({"esquema": 1, "generado": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                                                     "articulos": arts}, ensure_ascii=False, indent=1), encoding="utf-8")
+    return arts
+
+
+def listar(destino):
+    arts = indice_de(destino) if destino.is_dir() else []
+    if not arts:
+        print("No hay articulos publicados.")
+    for a in arts:
+        print(f"  {a['slug']:45} {a['fecha']}  {a['titulo']}")
+    return 0
+
+
+def quitar(fuente, destino, nombre):
+    """Quita un articulo de la pagina y aparta su carpeta para que no se vuelva a publicar."""
+    slug = slug_de(nombre)
+    publicado = destino / slug
+    origen = next((c for c in (fuente.iterdir() if fuente.is_dir() else []) if c.is_dir() and slug_de(c.name) == slug), None)
+    if not publicado.is_dir() and origen is None:
+        print(f"✗ No encuentro el articulo {nombre!r}. Usa --lista para ver los nombres.")
+        return 1
+    if publicado.is_dir():
+        shutil.rmtree(publicado)
+        print(f"  − {slug}: quitado de la pagina")
+    if origen is not None:
+        apartado = fuente / "_quitados" / origen.name
+        if apartado.exists():
+            shutil.rmtree(apartado)
+        apartado.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(origen), str(apartado))
+        print(f"  carpeta movida a {apartado} (si la regresas a {fuente}, se vuelve a publicar)")
+    n = len(indice_de(destino))
+    print(f"\nQuedan {n} articulos publicados.")
+    print("Siguiente paso: sube la carpeta 'articulos' de stack-web a GitHub y BORRA ahi la carpeta "
+          f"articulos/{slug} (en GitHub: entra a la carpeta, menu '...' › Delete directory).")
+    return 0
+
+
 def main():
     try:                                               # consolas de Windows sin UTF-8: que los simbolos no truenen
         sys.stdout.reconfigure(errors="replace")
@@ -338,7 +392,13 @@ def main():
     ap.add_argument("--destino", type=Path, default=DESTINO, help="carpeta 'articulos' dentro de stack-web")
     ap.add_argument("--revisar", action="store_true", help="solo revisar, sin escribir nada")
     ap.add_argument("--ver", action="store_true", help="publicar y abrir la pagina en el navegador")
+    ap.add_argument("--lista", action="store_true", help="mostrar los articulos publicados")
+    ap.add_argument("--quitar", metavar="NOMBRE", help="quitar un articulo de la pagina (el nombre de su carpeta)")
     a = ap.parse_args()
+    if a.lista:
+        sys.exit(listar(a.destino))
+    if a.quitar:
+        sys.exit(quitar(a.fuente, a.destino, a.quitar))
     print(f"Articulos: {a.fuente}\nPagina:    {a.destino}\n")
     try:
         errores = publicar(a.fuente, a.destino, a.revisar)

@@ -61,7 +61,7 @@
   "ajustes.del_dia": "Del día",
   "ajustes.propio": "Personalizado",
   "ajustes.propio_corto": "personalizado",
-  "ajustes.nota_jpy": "Yen a dólar (JPY→USD) siempre es el del día: {jpy}",
+  "ajustes.nota_jpy": "El yen a dólar (JPY→USD) siempre usa el del día: {jpy}.",
   "ajustes.guardar": "Guardar",
   "ajustes.chip": "USD ${usd} propio",
   "escaner.abrir": "Escanear carta",
@@ -189,7 +189,7 @@
   "ajustes.fuente_har": "Hareruya",
   "ajustes.fuente_scg": "SCG",
   "ajustes.fuente_ck": "Card Kingdom",
-  "ajustes.fuente_nota": "Es el precio grande en búsquedas, movers, escáner, inventarios y watchlist. Si esa tienda no tiene la carta, se muestra TCG. La ficha siempre muestra todas.",
+  "ajustes.fuente_nota": "Es el precio que ves en grande en búsquedas, movers, escáner, inventarios y watchlist.",
   "legal.privacidad": "Privacidad",
   "legal.terminos": "Términos",
   "cuenta.titulo": "Cuenta de Stack",
@@ -206,5 +206,7 @@
   "art.minutos": "{n} min de lectura",
   "art.vacio": "Todavía no hay artículos publicados.",
   "art.no_existe": "Este artículo ya no existe.",
-  "art.desde": "desde"
+  "art.desde": "desde",
+  "ajustes.fuente_nota2": "Si esa tienda no tiene la carta, se usa TCG. La ficha de cada carta siempre muestra todas las tiendas.",
+  "ajustes.nota_usd": "Personalizado sirve si compras con tu propio tipo de cambio. Se guarda solo en este dispositivo."
 }

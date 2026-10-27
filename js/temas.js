@@ -257,7 +257,9 @@ export function aplicarTema(perfil) {
   document.body.dataset.tema = p;
   document.body.dataset.anim = perfil?.animaciones === "NO" ? "NO" : "SI";
   // el fondo de toda la pagina (tambien lo que queda debajo del contenido y el rebote al hacer scroll) sigue al tema
-  document.documentElement.style.background = getComputedStyle(document.body).backgroundColor;
+  // con temas animados el body es transparente (se ve el lienzo): el html toma el color base del tema, nunca blanco
+  const cs = getComputedStyle(document.body), bgTema = cs.getPropertyValue("--bg").trim();
+  document.documentElement.style.background = bgTema || (cs.backgroundColor !== "rgba(0, 0, 0, 0)" ? cs.backgroundColor : "#0a0e0b");
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.content = p === "PER" ? temaPersonal().bg : (CLARO[p] || getComputedStyle(document.body).getPropertyValue("--bg").trim() || "#0a0e0b");
   try {

@@ -485,7 +485,7 @@ function pintarAjustes() {
       <fieldset>
         <legend>${esc(t("ajustes.fuente"))}</legend>
         <div class="segmentos">${FUENTES_PREF.map((f) => `<label><input type="radio" name="fuente" value="${f}" ${fuentePreferida() === f ? "checked" : ""}><span>${esc(t(`ajustes.fuente_${f}`))}</span></label>`).join("")}</div>
-        <p class="tenue nota">${esc(t("ajustes.fuente_nota"))}</p>
+        <div class="nota-ajuste"><p>${esc(t("ajustes.fuente_nota"))}</p><p>${esc(t("ajustes.fuente_nota2"))}</p></div>
       </fieldset>
       <fieldset>
         <legend>${esc(t("ajustes.usd_mxn"))}</legend>
@@ -495,7 +495,7 @@ function pintarAjustes() {
           <span>${esc(t("ajustes.propio"))}</span></label>
         <input class="valor num" name="propio" type="number" inputmode="decimal" step="0.01" min="1"
                placeholder="${delDia ?? "18.50"}" value="${a.usd_propio ?? ""}" aria-label="${esc(t("ajustes.propio"))}">
-        <p class="tenue nota">${esc(t("ajustes.nota_jpy", { jpy: m?.tc?.jpy_usd ?? "—" }))}</p>
+        <div class="nota-ajuste"><p>${esc(t("ajustes.nota_usd"))}</p><p>${esc(t("ajustes.nota_jpy", { jpy: m?.tc?.jpy_usd ?? "—" }))}</p></div>
       </fieldset>
       <button type="submit" class="guardar">${esc(t("ajustes.guardar"))}</button>
       <div class="legales"><a href="#/privacidad" data-cerrar>${esc(t("legal.privacidad"))}</a><a href="#/terminos" data-cerrar>${esc(t("legal.terminos"))}</a></div>
