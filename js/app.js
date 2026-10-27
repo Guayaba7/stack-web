@@ -169,9 +169,11 @@ async function vistaFicha(k) {
       </table>
       <div class="pie num">${esc(t("ficha.cambio", { usd: `${usdMxn(m).valor ?? "—"}${usdMxn(m).propio ? ` (${t("ajustes.propio_corto")})` : ""}`, jpy: m.tc?.jpy_usd ?? "—" }))}<br>${esc(t("estado.datos_del", { dia: fecha(datos().diaUsado) }))}</div>
       ${enlaces ? `<div class="enlaces">${enlaces}</div>` : ""}
+      ${cv.bloqueAgregar()}
       <section class="detalles" id="detalles" aria-live="polite"><div class="cargando"></div></section>
     </article>`;
   pintarDetalles(f.sid, k);
+  cv.montarAgregar(f);
 }
 
 // ---------- Detalles de la carta (Scryfall): texto, legalidad, rulings ----------

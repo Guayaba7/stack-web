@@ -1,5 +1,5 @@
 // Pantallas de la cuenta: entrar / crear / recuperar, ajustes de la cuenta, inventarios y watchlist (solo lectura).
-// Los inventarios y la watchlist los escribe la app; aqui se muestran valuados con los precios del dia.
+// Los inventarios se valuan con los precios del dia. La app escribe todo; la pagina tambien puede añadir cartas a un inventario.
 import * as cuenta from "./cuenta.js";
 import { aplicarTema, temaGuardado } from "./temas.js";
 import { datos, aPesos } from "./datos.js";
@@ -296,4 +296,107 @@ export async function vistaWatchlist(app) {
       <div class="medio"><div class="titulo">${esc(c.nombre)}</div><div class="sub">${esc(String(c.set || "").toUpperCase())} #${esc(c.numero)} · ${esc(t(`acabado.${LETRA[c.acab] || "n"}`))}${alerta ? ` · ${alerta}` : ""}</div></div>
       <div class="der"><div class="precio num">${mxn != null ? pesos(mxn) : "—"}</div><div class="tiendas">TCG</div></div></a></li>`;
   }).join("")}</ul>`;
+}
+
+// ---------------------------------------------------------------- añadir a inventario (desde la ficha de la carta)
+// La pagina tambien escribe: lee el inventario mas reciente de la nube, le suma la carta y lo guarda. Si otro dispositivo
+// guardo en ese momento (409), vuelve a leer y lo intenta otra vez, asi nunca se pisa lo que el otro acaba de guardar.
+// La app lo ve en su siguiente revision (al abrir y cada minuto).
+const ACAB_APP = { n: "nonfoil", f: "foil", e: "etched" };
+
+export function bloqueAgregar() {
+  if (!cuenta.disponible()) return "";
+  return `<section class="agregar" id="agregar" aria-live="polite"></section>`;
+}
+
+export async function montarAgregar(f) {
+  const caja = document.getElementById("agregar");
+  if (!caja) return;
+  if (!cuenta.sesion()) {
+    caja.innerHTML = `<h2>${esc(t("inv.agregar_titulo"))}</h2><p class="tenue">${esc(t("inv.agregar_entra"))}</p>
+      <a class="boton-vacio" href="#/cuenta">${esc(t("cuenta.entrar"))}</a>`;
+    return;
+  }
+  caja.innerHTML = `<h2>${esc(t("inv.agregar_titulo"))}</h2><div class="cargando"></div>`;
+  let invs;
+  try { invs = await inventarios(); } catch (e) { caja.innerHTML = `<h2>${esc(t("inv.agregar_titulo"))}</h2><p class="error">${esc(mensaje(e))}</p>`; return; }
+  if (!document.body.contains(caja)) return;
+  const acab = ACAB_APP[f.acab] || "nonfoil";
+  const tengo = (i) => (i.piezas || []).filter((p) => p.sid === f.sid && (p.acab || "nonfoil") === acab).reduce((s, p) => s + (Number(p.cantidad) || 0), 0);
+  const opciones = invs.length
+    ? invs.map((i) => `<option value="${esc(i.tipo)}">${esc(i.nombre === "(default)" ? t("inv.default") : i.nombre)}${tengo(i) ? ` · ${esc(t("inv.ya_tienes", { n: tengo(i) }))}` : ""}</option>`).join("")
+    : `<option value="">${esc(t("inv.default"))}</option>`;
+  caja.innerHTML = `<h2>${esc(t("inv.agregar_titulo"))}</h2>
+    <form class="form-cuenta form-agregar" id="form-agregar">
+      <label>${esc(t("inv.inventario"))}<select name="inv">${opciones}</select></label>
+      <div class="agregar-fila">
+        <label>${esc(t("inv.cantidad"))}<input name="cantidad" type="number" inputmode="numeric" min="1" max="999" step="1" value="1" required></label>
+        <label>${esc(t("inv.costo_unit"))}<input name="costo" type="number" inputmode="decimal" min="0" step="0.01" placeholder="${esc(t("inv.opcional"))}"></label>
+      </div>
+      <button class="primario" type="submit">${esc(t("inv.agregar"))}</button>
+      <p class="tenue agregar-msg" id="agregar-msg" role="status"></p>
+    </form>`;
+  const forma = caja.querySelector("form");
+  forma.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const q = Math.floor(Number(forma.cantidad.value));
+    const c = forma.costo.value === "" ? null : Math.max(0, Number(forma.costo.value));
+    const msg = caja.querySelector("#agregar-msg"), boton = forma.querySelector("button");
+    if (!(q >= 1 && q <= 999) || (c != null && !isFinite(c))) { msg.className = "error agregar-msg"; msg.textContent = t("inv.cantidad_mal"); return; }
+    boton.disabled = true; msg.className = "tenue agregar-msg"; msg.textContent = t("inv.agregando");
+    try {
+      const nombreInv = await agregarPieza(forma.inv.value, f, acab, q, c);
+      msg.className = "ok agregar-msg";
+      msg.textContent = t("inv.agregado", { n: q, nombre: f.nombre, inv: nombreInv === "(default)" ? t("inv.default") : nombreInv });
+      const sel = forma.inv.value;
+      await montarAgregar(f);                                 // se vuelve a pintar con lo que ya tienes
+      const f2 = document.getElementById("form-agregar");
+      if (f2) { if (sel) f2.inv.value = sel; const m2 = document.getElementById("agregar-msg"); m2.className = msg.className; m2.textContent = msg.textContent; }
+    } catch (e) {
+      boton.disabled = false; msg.className = "error agregar-msg"; msg.textContent = mensaje(e);
+    }
+  });
+}
+
+async function agregarPieza(tipo, f, acab, q, costo) {
+  for (let intento = 0; intento < 4; intento++) {
+    const lista = await cuenta.listar();
+    let destino = tipo, actual = null;
+    if (!destino) {                                           // la cuenta no tiene inventarios: se crea el de siempre
+      const existente = [];
+      for (const d of lista.filter((x) => x.tipo.startsWith("inv:"))) existente.push({ tipo: d.tipo, ...(await cuenta.leer(d.tipo, d.version)) });
+      const def = existente.find((i) => i.es_default);
+      if (def) destino = def.tipo;
+      else {
+        const rid = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, "0")).join("");
+        destino = `inv:${rid}`;
+        actual = { esquema: 1, id: rid, nombre: "(default)", es_default: true, piezas: [] };
+      }
+    }
+    const info = lista.find((d) => d.tipo === destino);
+    if (!actual) {
+      if (!info) throw new Error("no_existe");
+      actual = structuredClone(await cuenta.leer(destino, info.version));
+    }
+    cuenta.fijarVersion(destino, info ? info.version : 0);
+    const piezas = actual.piezas || (actual.piezas = []);
+    const p = piezas.find((x) => x.sid === f.sid && (x.acab || "nonfoil") === acab);
+    if (p) {
+      const antes = Number(p.cantidad) || 0;
+      if (costo != null) p.costo_prom = p.costo_prom == null ? costo : Math.round(((p.costo_prom * antes) + costo * q) / (antes + q) * 100) / 100;
+      p.cantidad = antes + q;
+      p.agregada = new Date().toISOString().slice(0, 19) + "+00:00";
+    } else {
+      piezas.push({ sid: f.sid, acab, nombre: f.nombre, set: f.set, numero: f.num, cantidad: q, costo_prom: costo,
+        agregada: new Date().toISOString().slice(0, 19) + "+00:00" });
+    }
+    actual.actualizado = new Date().toISOString().slice(0, 19) + "+00:00";
+    try {
+      await cuenta.guardar(destino, actual);
+      return actual.nombre;
+    } catch (e) {
+      if (e.estado !== 409) throw e;                          // otro dispositivo guardo justo antes: se reintenta
+    }
+  }
+  throw new Error("error");
 }

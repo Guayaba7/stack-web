@@ -280,3 +280,16 @@ body.en-escaner { overflow: hidden; }
   .ficha-cabeza { display: grid; grid-template-columns: 240px 1fr; gap: 20px; align-items: start; }
   .ficha-img { width: 100%; margin: 0; }
 }
+
+/* Añadir a inventario (ficha) */
+.agregar { margin: 18px 0 6px; padding: 14px; border: 1px solid var(--linea); border-radius: 12px; background: var(--panel); }
+.agregar h2 { font-size: 16px; margin: 0 0 8px; color: var(--verde); letter-spacing: .02em; }
+.agregar p { margin: 4px 0 0; }
+.form-agregar { margin-top: 4px; }
+.form-agregar select { height: 48px; padding: 0 10px; font-size: 16px; border-radius: 10px; border: 1px solid var(--linea); background: var(--bg); color: var(--texto); }
+.form-agregar input:not([type=checkbox]) { background: var(--bg); }
+.agregar-fila { display: grid; grid-template-columns: 1fr 1.4fr; gap: 10px; }
+.agregar-fila input { width: 100%; min-width: 0; box-sizing: border-box; }
+.agregar-msg { min-height: 1.3em; margin: 0; font-size: 14px; }
+.agregar-msg.ok { color: var(--verde); }
+.agregar-msg.error { color: var(--rojo); }

@@ -164,7 +164,7 @@
   "inv.n_cartas": "{n} cartas",
   "inv.actualizado": "act. {dia}",
   "inv.vacio": "Todavía no hay inventarios en tu cuenta.",
-  "inv.vacio_ayuda": "Se llenan desde la app de Stack al entrar con esta misma cuenta.",
+  "inv.vacio_ayuda": "Se llenan desde la app de Stack o al añadir cartas desde su ficha.",
   "inv.no_existe": "Ese inventario ya no existe.",
   "inv.filtrar": "Filtrar este inventario…",
   "inv.sin_precio": "{n} cartas sin precio hoy (debajo de $2 USD); no cuentan en el valor.",
@@ -172,5 +172,16 @@
   "watch.titulo": "Watchlist",
   "watch.vacio": "Tu watchlist está vacía.",
   "watch.objetivo": "alerta en {objetivo}",
-  "watch.alcanzo": "alcanzó {objetivo}"
+  "watch.alcanzo": "alcanzó {objetivo}",
+  "inv.agregar_titulo": "Añadir a inventario",
+  "inv.agregar_entra": "Entra a tu cuenta para añadir esta carta a tus inventarios.",
+  "inv.inventario": "Inventario",
+  "inv.cantidad": "Cantidad",
+  "inv.costo_unit": "Costo por pieza (MXN)",
+  "inv.opcional": "opcional",
+  "inv.agregar": "Añadir",
+  "inv.agregando": "Guardando…",
+  "inv.agregado": "Listo: {n} × {nombre} en {inv}. La app lo verá en menos de un minuto.",
+  "inv.ya_tienes": "tienes {n}",
+  "inv.cantidad_mal": "Escribe una cantidad de 1 a 999."
 }

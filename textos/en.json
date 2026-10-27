@@ -164,7 +164,7 @@
   "inv.n_cartas": "{n} cards",
   "inv.actualizado": "upd. {dia}",
   "inv.vacio": "There are no inventories in your account yet.",
-  "inv.vacio_ayuda": "They are filled from the Stack app when signed in with this same account.",
+  "inv.vacio_ayuda": "They are filled from the Stack app or by adding cards from their page.",
   "inv.no_existe": "That inventory no longer exists.",
   "inv.filtrar": "Filter this inventory…",
   "inv.sin_precio": "{n} cards have no price today (below USD 2); they are not counted in the value.",
@@ -172,5 +172,16 @@
   "watch.titulo": "Watchlist",
   "watch.vacio": "Your watchlist is empty.",
   "watch.objetivo": "alert at {objetivo}",
-  "watch.alcanzo": "reached {objetivo}"
+  "watch.alcanzo": "reached {objetivo}",
+  "inv.agregar_titulo": "Add to inventory",
+  "inv.agregar_entra": "Sign in to add this card to your inventories.",
+  "inv.inventario": "Inventory",
+  "inv.cantidad": "Quantity",
+  "inv.costo_unit": "Cost per copy (MXN)",
+  "inv.opcional": "optional",
+  "inv.agregar": "Add",
+  "inv.agregando": "Saving…",
+  "inv.agregado": "Done: {n} × {nombre} in {inv}. The app will see it within a minute.",
+  "inv.ya_tienes": "you have {n}",
+  "inv.cantidad_mal": "Enter a quantity from 1 to 999."
 }

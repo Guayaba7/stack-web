@@ -176,7 +176,7 @@ export async function listar() {
 
 export async function leer(tipo, version = null) {
   const c = docsCache.get(tipo);
-  if (c && version != null && c.version === version) return c.obj;
+  if (c && c.obj && version != null && c.version === version) return c.obj;
   try {
     const j = await api(`/docs/${encodeURIComponent(tipo)}`, null, "GET");
     const obj = await descifrarDoc(ses.mk, tipo, j.datos);
@@ -188,7 +188,12 @@ export async function leer(tipo, version = null) {
   }
 }
 
-// La web no edita (la app es la que escribe), pero queda listo para cuando haga falta.
+// Guarda un documento sobre la version que se leyo. Si otro dispositivo guardo antes, el servidor responde 409.
+export function fijarVersion(tipo, version) {
+  const c = docsCache.get(tipo);
+  docsCache.set(tipo, { version, obj: c?.obj ?? null });
+}
+
 export async function guardar(tipo, obj) {
   const v = docsCache.get(tipo)?.version ?? 0;
   const j = await api(`/docs/${encodeURIComponent(tipo)}`, { version: v, datos: await cifrarDoc(ses.mk, tipo, obj) }, "PUT");
