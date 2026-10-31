@@ -262,6 +262,7 @@ function leerRuta() {
   if (h.startsWith("/inv")) return { pantalla: "inventarios" };
   if (h.startsWith("/watch")) return { pantalla: "watchlist" };
   if (h.startsWith("/privacidad")) return { pantalla: "privacidad" };
+  if (h.startsWith("/stack")) return { pantalla: "stack" };
   if (h.startsWith("/articulos")) return { pantalla: "articulos" };
   if (h.startsWith("/a/")) return { pantalla: "articulo", slug: decodeURIComponent(h.slice(3)) };
   if (h.startsWith("/terminos")) return { pantalla: "terminos" };
@@ -347,6 +348,7 @@ function pantallaCuenta(r) {
   document.body.classList.remove("en-portada");
   if (r.pantalla === "cuenta") cv.vistaCuenta(app);
   else if (r.pantalla === "inventarios") cv.vistaInventarios(app);
+  else if (r.pantalla === "stack") cv.vistaStack(app);
   else if (r.pantalla === "inventario") cv.vistaInventario(app, r.id);
   else if (r.pantalla === "watchlist") cv.vistaWatchlist(app);
   else if (r.pantalla === "privacidad" || r.pantalla === "terminos") vistaLegal(app, r.pantalla);
@@ -482,13 +484,13 @@ function pintarAjustes() {
   hoja.innerHTML = `<form method="dialog" class="hoja-cuerpo">
       <div class="hoja-cabeza"><h2>${esc(t("ajustes.titulo"))}</h2>
         <button type="button" class="cerrar" data-cerrar aria-label="${esc(t("ajustes.cerrar"))}">✕</button></div>
-      <fieldset>
-        <legend>${esc(t("ajustes.fuente"))}</legend>
+      <section class="aj-grupo">
+        <h3 class="aj-tit">${esc(t("ajustes.fuente"))}</h3>
         <div class="segmentos">${FUENTES_PREF.map((f) => `<label><input type="radio" name="fuente" value="${f}" ${fuentePreferida() === f ? "checked" : ""}><span>${esc(t(`ajustes.fuente_${f}`))}</span></label>`).join("")}</div>
         <div class="nota-ajuste"><p>${esc(t("ajustes.fuente_nota"))}</p><p>${esc(t("ajustes.fuente_nota2"))}</p></div>
-      </fieldset>
-      <fieldset>
-        <legend>${esc(t("ajustes.usd_mxn"))}</legend>
+      </section>
+      <section class="aj-grupo">
+        <h3 class="aj-tit">${esc(t("ajustes.usd_mxn"))}</h3>
         <label class="opcion"><input type="radio" name="modo" value="dia" ${a.usd_modo !== "propio" ? "checked" : ""}>
           <span>${esc(t("ajustes.del_dia"))}<span class="tenue num"> · ${delDia ?? "—"}${m?.tc?.dia ? ` (${esc(fecha(m.tc.dia))})` : ""}</span></span></label>
         <label class="opcion"><input type="radio" name="modo" value="propio" ${a.usd_modo === "propio" ? "checked" : ""}>
@@ -496,7 +498,7 @@ function pintarAjustes() {
         <input class="valor num" name="propio" type="number" inputmode="decimal" step="0.01" min="1"
                placeholder="${delDia ?? "18.50"}" value="${a.usd_propio ?? ""}" aria-label="${esc(t("ajustes.propio"))}">
         <div class="nota-ajuste"><p>${esc(t("ajustes.nota_usd"))}</p><p>${esc(t("ajustes.nota_jpy", { jpy: m?.tc?.jpy_usd ?? "—" }))}</p></div>
-      </fieldset>
+      </section>
       <button type="submit" class="guardar">${esc(t("ajustes.guardar"))}</button>
       <div class="legales"><a href="#/privacidad" data-cerrar>${esc(t("legal.privacidad"))}</a><a href="#/terminos" data-cerrar>${esc(t("legal.terminos"))}</a></div>
     </form>`;

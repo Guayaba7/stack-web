@@ -533,3 +533,27 @@ svg.logo { width: 28px; height: 28px; display: block; }
 .hoja .valor { margin-top: 6px; }
 /* la hoja de ajustes nunca deja ver lo de atras (temas con panel translucido) */
 .hoja { background: linear-gradient(var(--panel), var(--panel)), var(--bg); }
+
+/* Ajustes: una sola medida de separacion entre todo (20 px entre bloques, 12 px dentro de cada bloque) */
+.hoja-cuerpo { display: flex; flex-direction: column; gap: 20px; }
+.hoja-cabeza { margin: 0; }
+.aj-grupo { display: flex; flex-direction: column; gap: 12px; }
+.aj-grupo + .aj-grupo { border-top: 1px solid var(--linea); padding-top: 20px; }
+.aj-tit { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--texto); }
+.hoja .segmentos, .hoja .nota-ajuste { margin: 0; }
+.hoja .opcion { min-height: 40px; }
+.hoja .valor { margin: 0 0 0 30px; }
+.hoja .guardar { margin: 0; }
+.hoja .legales { margin: 0; }
+/* Al jalar la pagina hacia abajo (rebote en celular y trackpad), arriba de la barra sigue el color de la barra */
+.barra::before { content: ""; position: absolute; left: 0; right: 0; bottom: 100%; height: 100vh; background: var(--fondo); pointer-events: none; }
+html { overscroll-behavior-y: none; }
+
+/* Abrir archivo .stack */
+.soltar { display: flex; flex-direction: column; gap: 8px; align-items: center; justify-content: center; text-align: center; min-height: 180px; padding: 24px;
+  border: 1px dashed var(--linea); border-radius: 12px; background: var(--panel); cursor: pointer; margin: 8px 0 14px; }
+.soltar.encima, .soltar:hover { border-color: var(--verde); }
+.soltar b { color: var(--verde); }
+.etiqueta-stack { color: var(--tenue); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; margin-top: 8px; }
+.ambar { color: var(--ambar); }
+.abrir-stack { margin-top: 16px; }

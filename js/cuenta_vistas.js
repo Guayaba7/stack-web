@@ -246,7 +246,8 @@ export async function vistaInventarios(app) {
   let invs;
   try { invs = await inventarios(); } catch (e) { app.innerHTML = `<div class="vacio">${esc(mensaje(e))}</div>`; return; }
   if (!location.hash.startsWith("#/inv")) return;
-  if (!invs.length) { app.innerHTML = `<h1 class="titulo-vista">${esc(t("inv.titulo"))}</h1><div class="vacio"><div class="grande">${esc(t("inv.vacio"))}</div>${esc(t("inv.vacio_ayuda"))}</div>`; return; }
+  const abrirStack = `<a class="boton-vacio abrir-stack" href="#/stack">${esc(t("stack.abrir"))}</a>`;
+  if (!invs.length) { app.innerHTML = `<h1 class="titulo-vista">${esc(t("inv.titulo"))}</h1><div class="vacio"><div class="grande">${esc(t("inv.vacio"))}</div>${esc(t("inv.vacio_ayuda"))}</div>${abrirStack}`; return; }
   const total = valuar(invs.flatMap((i) => i.piezas || []));
   app.innerHTML = `<h1 class="titulo-vista">${esc(t("inv.titulo"))}</h1>
     <div class="resumen num"><div><span class="tenue">${esc(t("inv.valor_hoy"))}</span><b>${pesos(total.valor)}</b></div>
@@ -258,7 +259,7 @@ export async function vistaInventarios(app) {
         <div class="medio"><div class="titulo">${esc(i.nombre === "(default)" ? t("inv.default") : i.nombre)}</div>
         <div class="sub">${esc(t("inv.n_cartas", { n: v.cartas.toLocaleString() }))} · ${esc(t("inv.actualizado", { dia: fecha(String(i.actualizado || "").slice(0, 10)) }))}</div></div>
         <div class="der"><div class="precio num">${pesos(v.valor)}</div><div class="sub num">${esc(t("inv.costo"))} ${pesos(v.costo)}</div></div></a></li>`;
-    }).join("")}</ul>`;
+    }).join("")}</ul>${abrirStack}`;
 }
 
 export async function vistaInventario(app, id) {
@@ -421,4 +422,83 @@ async function agregarPieza(tipo, f, acab, q, costo) {
     }
   }
   throw new Error("error");
+}
+
+// ---------------------------------------------------------------- abrir un archivo .stack (inventario o bundle de la app)
+// Se abre aqui mismo, sin subirlo a ningun lado: se lee en el navegador. Sin cuenta se ve con imagenes y precio de hoy;
+// con cuenta se puede guardar como inventario nuevo.
+const MAGIA = "STACK-INV\x01";
+let stackAbierto = null;
+
+async function leerStack(archivo) {
+  const buf = new Uint8Array(await archivo.arrayBuffer());
+  const cab = String.fromCharCode(...buf.slice(0, MAGIA.length));
+  if (cab !== MAGIA) throw new Error("no_stack");
+  if (typeof DecompressionStream === "undefined") throw new Error("navegador_viejo");
+  const flujo = new Blob([buf.slice(MAGIA.length)]).stream().pipeThrough(new DecompressionStream("gzip"));
+  const doc = JSON.parse(await new Response(flujo).text());
+  if (!doc || doc.esquema !== 1 || !Array.isArray(doc.piezas)) throw new Error("version");
+  doc.piezas = doc.piezas.filter((p) => p && /^[0-9a-f-]{36}$/.test(p.sid) && Number(p.cantidad) > 0);
+  return doc;
+}
+
+export function vistaStack(app) {
+  const pintarElegir = (error) => {
+    app.innerHTML = `<h1 class="titulo-vista">${esc(t("stack.titulo"))}</h1>
+      <label class="soltar" id="soltar"><input type="file" id="archivo-stack" accept=".stack,application/octet-stream" hidden>
+        <b>${esc(t("stack.elegir"))}</b><span class="tenue">${esc(t("stack.elegir_ayuda"))}</span></label>
+      ${error ? `<p class="error">${esc(error)}</p>` : ""}<p class="nota">${esc(t("stack.privado"))}</p>`;
+    const zona = app.querySelector("#soltar"), inp = app.querySelector("#archivo-stack");
+    const abrir = async (f) => {
+      if (!f) return;
+      try { stackAbierto = await leerStack(f); stackAbierto.archivo = f.name; pintarVista(); }
+      catch (e) { pintarElegir(t(`stack.err.${e.message}`) !== `stack.err.${e.message}` ? t(`stack.err.${e.message}`) : t("stack.err.danado")); }
+    };
+    inp.addEventListener("change", () => abrir(inp.files[0]));
+    zona.addEventListener("dragover", (e) => { e.preventDefault(); zona.classList.add("encima"); });
+    zona.addEventListener("dragleave", () => zona.classList.remove("encima"));
+    zona.addEventListener("drop", (e) => { e.preventDefault(); zona.classList.remove("encima"); abrir(e.dataTransfer.files[0]); });
+  };
+  const pintarVista = () => {
+    const d = stackAbierto, v = valuar(d.piezas), b = d.bundle;
+    const filas = d.piezas.map((p) => {
+      const n = Number(p.cantidad) || 0, unit = precioFila(filaDe(`${p.sid}:${LETRA[p.acab] || "n"}`), fuentePreferida()).mxn;
+      return { ...p, n, unit, valor: unit != null ? unit * n : null };
+    }).sort((x, y) => (y.valor ?? -1) - (x.valor ?? -1));
+    app.innerHTML = `<a class="volver" href="#/stack" id="otro-stack">${esc(t("stack.otro"))}</a>
+      <div class="etiqueta-stack">${esc(t(d.tipo === "bundle" ? "stack.bundle" : "stack.inventario"))}${d.de ? ` · ${esc(t("stack.de", { quien: d.de }))}` : ""}</div>
+      <h1 class="titulo-vista">${esc(d.nombre || d.archivo)}</h1>
+      <div class="resumen num">${b && b.precio_mxn != null ? `<div><span class="tenue">${esc(t("stack.precio_bundle"))}</span><b class="ambar">${pesos(b.precio_mxn)}</b></div>` : ""}
+        <div><span class="tenue">${esc(t("inv.valor_hoy"))}</span><b>${pesos(v.valor)}</b></div>
+        <div><span class="tenue">${esc(t("inv.cartas"))}</span><b>${v.cartas.toLocaleString()}</b></div></div>
+      ${b && b.precio_mxn != null && v.valor ? `<p class="nota">${esc(t("stack.descuento", { pct: Math.round((1 - b.precio_mxn / v.valor) * 100) }))}</p>` : ""}
+      ${b && b.nota ? `<p class="nota">${esc(b.nota)}</p>` : ""}
+      <ul class="lista">${filas.map((f) => `<li><a class="fila" href="#/c/${encodeURIComponent(`${f.sid}:${LETRA[f.acab] || "n"}`)}">
+        <img loading="lazy" alt="" src="${miniatura(f.sid)}" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'sin-img'}))">
+        <div class="medio"><div class="titulo">${esc(f.nombre || "?")}</div><div class="sub">${esc(String(f.set || "").toUpperCase())} #${esc(f.numero || "")} · ${esc(t(`acabado.${LETRA[f.acab] || "n"}`))} · ×${f.n}</div></div>
+        <div class="der"><div class="precio num">${f.valor != null ? pesos(f.valor) : "—"}</div><div class="sub num">${f.unit != null ? `${pesos(f.unit)} c/u` : esc(t("inv.sin_precio_corto"))}</div></div></a></li>`).join("")}</ul>
+      <section class="agregar" id="guardar-stack"></section>`;
+    app.querySelector("#otro-stack").addEventListener("click", (e) => { e.preventDefault(); stackAbierto = null; pintarElegir(); });
+    const caja = app.querySelector("#guardar-stack");
+    if (!cuenta.disponible()) { caja.remove(); return; }
+    if (!cuenta.sesion()) { caja.innerHTML = `<h2>${esc(t("stack.guardar_titulo"))}</h2><p class="tenue">${esc(t("stack.entra"))}</p><a class="boton-vacio" href="#/cuenta">${esc(t("cuenta.entrar"))}</a>`; return; }
+    caja.innerHTML = `<h2>${esc(t("stack.guardar_titulo"))}</h2><form class="form-cuenta" id="form-stack">
+      <label>${esc(t("stack.nombre_nuevo"))}<input name="nombre" maxlength="40" value="${esc(d.nombre || "Recibido")}"></label>
+      <button class="primario" type="submit">${esc(t("stack.guardar"))}</button><p class="tenue agregar-msg" id="stack-msg" role="status"></p></form>`;
+    caja.querySelector("form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const msg = caja.querySelector("#stack-msg"), btn = caja.querySelector("button");
+      btn.disabled = true; msg.className = "tenue agregar-msg"; msg.textContent = t("inv.agregando");
+      try {
+        const rid = [...crypto.getRandomValues(new Uint8Array(16))].map((x) => x.toString(16).padStart(2, "0")).join("");
+        const ahora = new Date().toISOString().slice(0, 19) + "+00:00";
+        const nombre = (e.target.nombre.value || "").trim().slice(0, 40) || "Recibido";
+        await cuenta.guardar(`inv:${rid}`, { esquema: 1, id: rid, nombre, es_default: false, actualizado: ahora,
+          piezas: d.piezas.map((p) => ({ sid: p.sid, acab: p.acab || "nonfoil", nombre: p.nombre, set: p.set, numero: p.numero, cantidad: Number(p.cantidad),
+            costo_prom: d.con_costos && p.costo_prom != null ? Number(p.costo_prom) : null, agregada: ahora })) });
+        msg.className = "ok agregar-msg"; msg.innerHTML = `${esc(t("stack.guardado", { nombre }))} <a href="#/inv/${rid}">${esc(t("stack.ver"))}</a>`;
+      } catch (ex) { btn.disabled = false; msg.className = "error agregar-msg"; msg.textContent = mensaje(ex); }
+    });
+  };
+  if (stackAbierto) pintarVista(); else pintarElegir();
 }
