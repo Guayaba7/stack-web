@@ -263,6 +263,7 @@ function leerRuta() {
   if (h.startsWith("/watch")) return { pantalla: "watchlist" };
   if (h.startsWith("/privacidad")) return { pantalla: "privacidad" };
   if (h.startsWith("/stack")) return { pantalla: "stack" };
+  if (h.startsWith("/s/")) return { pantalla: "stack", codigo: decodeURIComponent(h.slice(3)) };
   if (h.startsWith("/articulos")) return { pantalla: "articulos" };
   if (h.startsWith("/a/")) return { pantalla: "articulo", slug: decodeURIComponent(h.slice(3)) };
   if (h.startsWith("/terminos")) return { pantalla: "terminos" };
@@ -348,7 +349,7 @@ function pantallaCuenta(r) {
   document.body.classList.remove("en-portada");
   if (r.pantalla === "cuenta") cv.vistaCuenta(app);
   else if (r.pantalla === "inventarios") cv.vistaInventarios(app);
-  else if (r.pantalla === "stack") cv.vistaStack(app);
+  else if (r.pantalla === "stack") cv.vistaStack(app, r.codigo || "");
   else if (r.pantalla === "inventario") cv.vistaInventario(app, r.id);
   else if (r.pantalla === "watchlist") cv.vistaWatchlist(app);
   else if (r.pantalla === "privacidad" || r.pantalla === "terminos") vistaLegal(app, r.pantalla);

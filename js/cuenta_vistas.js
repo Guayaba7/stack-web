@@ -430,21 +430,40 @@ async function agregarPieza(tipo, f, acab, q, costo) {
 const MAGIA = "STACK-INV\x01";
 let stackAbierto = null;
 
-async function leerStack(archivo) {
-  const buf = new Uint8Array(await archivo.arrayBuffer());
-  const cab = String.fromCharCode(...buf.slice(0, MAGIA.length));
-  if (cab !== MAGIA) throw new Error("no_stack");
+async function docDeGzip(gz) {
   if (typeof DecompressionStream === "undefined") throw new Error("navegador_viejo");
-  const flujo = new Blob([buf.slice(MAGIA.length)]).stream().pipeThrough(new DecompressionStream("gzip"));
+  const flujo = new Blob([gz]).stream().pipeThrough(new DecompressionStream("gzip"));
   const doc = JSON.parse(await new Response(flujo).text());
   if (!doc || doc.esquema !== 1 || !Array.isArray(doc.piezas)) throw new Error("version");
   doc.piezas = doc.piezas.filter((p) => p && /^[0-9a-f-]{36}$/.test(p.sid) && Number(p.cantidad) > 0);
   return doc;
 }
+async function leerStack(archivo) {
+  const buf = new Uint8Array(await archivo.arrayBuffer());
+  const cab = String.fromCharCode(...buf.slice(0, MAGIA.length));
+  if (cab !== MAGIA) throw new Error("no_stack");
+  return docDeGzip(buf.slice(MAGIA.length));
+}
+const fmtCodigo = (v) => { v = String(v || "").toUpperCase().replace(/[^0-9A-Z]/g, "").slice(0, 10); return v.length > 5 ? `${v.slice(0, 5)}-${v.slice(5)}` : v; };
 
-export function vistaStack(app) {
-  const pintarElegir = (error) => {
+export function vistaStack(app, codigoRuta = "") {
+  const errorDe = (e, pre) => (t(`${pre}.${e.message}`) !== `${pre}.${e.message}` ? t(`${pre}.${e.message}`) : t("stack.err.danado"));
+  const porCodigo = async (codigo, errEn) => {
+    errEn.className = "tenue"; errEn.textContent = t("stack.buscando");
+    try {
+      const r = await cuenta.abrirCompartido(codigo);
+      stackAbierto = await docDeGzip(r.gz); stackAbierto.archivo = r.codigo; stackAbierto.codigo = r.codigo; stackAbierto.expira = r.expira;
+      if (location.hash !== `#/s/${r.codigo}`) history.replaceState(null, "", `#/s/${r.codigo}`);
+      pintarVista();
+    } catch (e) { errEn.className = "error"; errEn.textContent = errorDe(e, "stack.err"); }
+  };
+  const pintarElegir = (error, codigo = "") => {
     app.innerHTML = `<h1 class="titulo-vista">${esc(t("stack.titulo"))}</h1>
+      <form class="codigo-stack" id="form-codigo" autocomplete="off">
+        <input id="codigo-stack" class="num" inputmode="text" autocapitalize="characters" spellcheck="false" maxlength="11" placeholder="XXXXX-XXXXX" aria-label="${esc(t("stack.codigo"))}" value="${esc(fmtCodigo(codigo))}">
+        <button class="primario" type="submit">${esc(t("stack.abrir_codigo"))}</button></form>
+      <p id="codigo-msg" class="tenue" role="status"></p>
+      <div class="o-bien tenue">${esc(t("stack.o_archivo"))}</div>
       <label class="soltar" id="soltar"><input type="file" id="archivo-stack" accept=".stack,application/octet-stream" hidden>
         <b>${esc(t("stack.elegir"))}</b><span class="tenue">${esc(t("stack.elegir_ayuda"))}</span></label>
       ${error ? `<p class="error">${esc(error)}</p>` : ""}<p class="nota">${esc(t("stack.privado"))}</p>`;
@@ -452,12 +471,16 @@ export function vistaStack(app) {
     const abrir = async (f) => {
       if (!f) return;
       try { stackAbierto = await leerStack(f); stackAbierto.archivo = f.name; pintarVista(); }
-      catch (e) { pintarElegir(t(`stack.err.${e.message}`) !== `stack.err.${e.message}` ? t(`stack.err.${e.message}`) : t("stack.err.danado")); }
+      catch (e) { pintarElegir(errorDe(e, "stack.err")); }
     };
     inp.addEventListener("change", () => abrir(inp.files[0]));
     zona.addEventListener("dragover", (e) => { e.preventDefault(); zona.classList.add("encima"); });
     zona.addEventListener("dragleave", () => zona.classList.remove("encima"));
     zona.addEventListener("drop", (e) => { e.preventDefault(); zona.classList.remove("encima"); abrir(e.dataTransfer.files[0]); });
+    const ci = app.querySelector("#codigo-stack"), cm = app.querySelector("#codigo-msg");
+    ci.addEventListener("input", () => { ci.value = fmtCodigo(ci.value); });
+    app.querySelector("#form-codigo").addEventListener("submit", (e) => { e.preventDefault(); porCodigo(ci.value, cm); });
+    if (codigo) porCodigo(codigo, cm);
   };
   const pintarVista = () => {
     const d = stackAbierto, v = valuar(d.piezas), b = d.bundle;
@@ -466,7 +489,7 @@ export function vistaStack(app) {
       return { ...p, n, unit, valor: unit != null ? unit * n : null };
     }).sort((x, y) => (y.valor ?? -1) - (x.valor ?? -1));
     app.innerHTML = `<a class="volver" href="#/stack" id="otro-stack">${esc(t("stack.otro"))}</a>
-      <div class="etiqueta-stack">${esc(t(d.tipo === "bundle" ? "stack.bundle" : "stack.inventario"))}${d.de ? ` · ${esc(t("stack.de", { quien: d.de }))}` : ""}</div>
+      <div class="etiqueta-stack">${esc(t(d.tipo === "bundle" ? "stack.bundle" : "stack.inventario"))}${d.de ? ` · ${esc(t("stack.de", { quien: d.de }))}` : ""}${d.codigo ? ` · ${esc(d.codigo)}` : ""}${d.expira ? ` · ${esc(t("stack.caduca", { fecha: fecha(String(d.expira).slice(0, 10)) }))}` : ""}</div>
       <h1 class="titulo-vista">${esc(d.nombre || d.archivo)}</h1>
       <div class="resumen num">${b && b.precio_mxn != null ? `<div><span class="tenue">${esc(t("stack.precio_bundle"))}</span><b class="ambar">${pesos(b.precio_mxn)}</b></div>` : ""}
         <div><span class="tenue">${esc(t("inv.valor_hoy"))}</span><b>${pesos(v.valor)}</b></div>
@@ -478,7 +501,7 @@ export function vistaStack(app) {
         <div class="medio"><div class="titulo">${esc(f.nombre || "?")}</div><div class="sub">${esc(String(f.set || "").toUpperCase())} #${esc(f.numero || "")} · ${esc(t(`acabado.${LETRA[f.acab] || "n"}`))} · ×${f.n}</div></div>
         <div class="der"><div class="precio num">${f.valor != null ? pesos(f.valor) : "—"}</div><div class="sub num">${f.unit != null ? `${pesos(f.unit)} c/u` : esc(t("inv.sin_precio_corto"))}</div></div></a></li>`).join("")}</ul>
       <section class="agregar" id="guardar-stack"></section>`;
-    app.querySelector("#otro-stack").addEventListener("click", (e) => { e.preventDefault(); stackAbierto = null; pintarElegir(); });
+    app.querySelector("#otro-stack").addEventListener("click", (e) => { e.preventDefault(); stackAbierto = null; history.replaceState(null, "", "#/stack"); pintarElegir(); });
     const caja = app.querySelector("#guardar-stack");
     if (!cuenta.disponible()) { caja.remove(); return; }
     if (!cuenta.sesion()) { caja.innerHTML = `<h2>${esc(t("stack.guardar_titulo"))}</h2><p class="tenue">${esc(t("stack.entra"))}</p><a class="boton-vacio" href="#/cuenta">${esc(t("cuenta.entrar"))}</a>`; return; }
@@ -500,5 +523,7 @@ export function vistaStack(app) {
       } catch (ex) { btn.disabled = false; msg.className = "error agregar-msg"; msg.textContent = mensaje(ex); }
     });
   };
-  if (stackAbierto) pintarVista(); else pintarElegir();
+  const cod = fmtCodigo(codigoRuta);
+  if (cod) { if (stackAbierto && stackAbierto.codigo === cod) pintarVista(); else { stackAbierto = null; pintarElegir("", cod); } }
+  else if (stackAbierto && !stackAbierto.codigo) pintarVista(); else { stackAbierto = null; pintarElegir(); }
 }

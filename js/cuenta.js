@@ -200,3 +200,22 @@ export async function guardar(tipo, obj) {
   docsCache.set(tipo, { version: j.version, obj });
   return j.version;
 }
+
+// ---------------------------------------------------------------- inventarios compartidos con codigo (app 0.7.5+)
+// Mismo protocolo que la app: PBKDF2-SHA256(codigo, "stack-compartir-v1", 100000) -> 48 bytes: id (16, hex) | llave AES (32).
+// El servidor solo guarda el bloque cifrado bajo el id; sin el codigo no se puede leer. Devuelve el gzip descifrado.
+export async function abrirCompartido(codigo) {
+  const c = normalizarCodigo(codigo);
+  if (c.length !== 10) throw new Error("codigo_invalido");
+  const base = await sutil.importKey("raw", te.encode(c), "PBKDF2", false, ["deriveBits"]);
+  const bits = new Uint8Array(await sutil.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: te.encode("stack-compartir-v1"), iterations: 100000 }, base, 384));
+  let j;
+  try { j = await api(`/compartir/${hex(bits.slice(0, 16))}`, null, "GET"); }
+  catch (e) { throw new Error(e.message === "sin_red" ? "sin_red" : "codigo_no_existe"); }
+  const raw = unb64(j.datos);
+  const llave = await sutil.importKey("raw", bits.slice(16), "AES-GCM", false, ["decrypt"]);
+  try {
+    const gz = await sutil.decrypt({ name: "AES-GCM", iv: raw.slice(0, 12), additionalData: te.encode("stack-compartir-v1") }, llave, raw.slice(12));
+    return { gz: new Uint8Array(gz), expira: j.expira, codigo: `${c.slice(0, 5)}-${c.slice(5)}` };
+  } catch { throw new Error("codigo_no_existe"); }
+}
