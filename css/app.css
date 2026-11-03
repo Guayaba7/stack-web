@@ -567,3 +567,19 @@ html { overscroll-behavior-y: none; }
 #codigo-msg { min-height: 1.4em; margin: 4px 0 10px; }
 .o-bien { text-align: center; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; margin: 10px 0 4px; }
 @media (max-width: 420px) { .codigo-stack input { font-size: 19px; letter-spacing: .1em; } }
+
+/* Subfiltros con botones (color, tipo, acabado, rareza) */
+.toggles { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 14px; }
+.toggles .tg { width: 40px; height: 36px; display: inline-grid; place-items: center; padding: 0; border: 1px solid var(--linea); border-radius: 0;
+  background: var(--panel); color: var(--texto); cursor: pointer; opacity: .55; transition: opacity .12s, border-color .12s, background .12s; }
+.toggles .tg:hover { opacity: .9; }
+.toggles .tg.on { opacity: 1; border-color: var(--verde); background: color-mix(in srgb, var(--verde) 16%, var(--panel)); }
+.toggles .tg:focus-visible { outline: 2px solid var(--verde); outline-offset: 1px; opacity: 1; }
+.toggles .tg svg { width: 20px; height: 20px; fill: currentColor; display: block; }
+.toggles .tg .tgtipo { width: 19px; height: 19px; }
+.toggles .tgmana { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; box-shadow: inset 0 0 0 1px rgba(0,0,0,.35); }
+.toggles .tgmana svg { width: 14px; height: 14px; fill: #151515; }
+.toggles .tgmana.multi { background: linear-gradient(135deg, #f2dc8a, #c8962f); }
+.toggles .tgsep { width: 6px; }
+.toggles .tg.tgx { opacity: 1; color: var(--ambar, #e2bf55); font-size: 16px; }
+@media (max-width: 420px) { .toggles { gap: 4px; } .toggles .tg { width: 36px; height: 34px; } .toggles .tgsep { width: 2px; } }

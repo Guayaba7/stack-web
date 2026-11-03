@@ -7,6 +7,8 @@ import { fuentePreferida, NOMBRE_FUENTE } from "./ajustes.js";
 import { normalizar } from "./buscar.js";
 import { t, pesos, fecha, idiomaActual } from "./i18n.js";
 import { logoSvg } from "./logo.js";
+import { nuevoTog, togActivo, alternarTog, pasaFila, barraToggles } from "./filtros.js";
+const TOGI = nuevoTog();       // toggles de color / tipo / acabado / rareza en los inventarios
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const miniatura = (sid) => `https://cards.scryfall.io/small/front/${sid[0]}/${sid[1]}/${sid}.jpg`;
@@ -280,19 +282,22 @@ export async function vistaInventario(app, id) {
       <div><span class="tenue">${esc(t("inv.cartas"))}</span><b>${v.cartas.toLocaleString()}</b></div></div>
     ${v.sinPrecio ? `<p class="nota">${esc(t("inv.sin_precio", { n: v.sinPrecio }))}</p>` : ""}
     <div class="buscador"><input id="filtro-inv" type="text" placeholder="${esc(t("inv.filtrar"))}" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
-    <ul class="lista" id="lista-inv"></ul>`;
-  const lista = app.querySelector("#lista-inv");
+    <div id="tog-inv"></div><ul class="lista" id="lista-inv"></ul>`;
+  const lista = app.querySelector("#lista-inv"), cajaTog = app.querySelector("#tog-inv");
   const pintar = (q) => {
     const partes = normalizar(q).split(" ").filter(Boolean);
-    const vis = filas.filter((f) => partes.every((p) => f.texto.includes(p))).slice(0, 400);
+    cajaTog.innerHTML = barraToggles(TOGI, "i");
+    const vis = filas.filter((f) => partes.every((p) => f.texto.includes(p)) && pasaFila(TOGI, filaDe(`${f.sid}:${LETRA[f.acab] || "n"}`))).slice(0, 400);
     lista.innerHTML = vis.map((f) => `<li><a class="fila" href="#/c/${encodeURIComponent(`${f.sid}:${LETRA[f.acab] || "n"}`)}">
         <img loading="lazy" alt="" src="${miniatura(f.sid)}" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'sin-img'}))">
         <div class="medio"><div class="titulo">${esc(f.nombre)}</div><div class="sub">${esc(String(f.set || "").toUpperCase())} #${esc(f.numero)} · ${esc(t(`acabado.${LETRA[f.acab] || "n"}`))} · ×${f.n}</div></div>
         <div class="der"><div class="precio num">${f.valor != null ? pesos(f.valor) : "—"}</div><div class="sub num">${f.unit != null ? `${pesos(f.unit)} c/u` : esc(t("inv.sin_precio_corto"))}</div></div></a></li>`).join("")
-      || `<li class="vacio">${esc(t("resultados.sin", { q }))}</li>`;
+      || `<li class="vacio">${esc(togActivo(TOGI) ? t("tog.nada") : t("resultados.sin", { q }))}</li>`;
   };
   pintar("");
-  app.querySelector("#filtro-inv").addEventListener("input", (e) => pintar(e.target.value));
+  const inp = app.querySelector("#filtro-inv");
+  inp.addEventListener("input", (e) => pintar(e.target.value));
+  cajaTog.addEventListener("click", (e) => { const b = e.target.closest("[data-tog]"); if (b) { alternarTog(TOGI, Number(b.dataset.tog)); pintar(inp.value); } });
 }
 
 // ---------------------------------------------------------------- watchlist

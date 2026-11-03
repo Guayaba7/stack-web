@@ -10,6 +10,7 @@ import * as art from "./articulos.js";
 import * as escaner from "./escaner.js";
 import * as scry from "./scryfall.js";
 import * as cv from "./cuenta_vistas.js";
+import { nuevoTog, togActivo, alternarTog, pasaFila, barraToggles } from "./filtros.js";
 
 const app = document.getElementById("app");
 const FUENTES = [["tcg", "TCG"], ["har", "HAR"], ["har_jp", "HAR JP"], ["scg", "SCG"], ["ck", "CK"]];
@@ -19,6 +20,7 @@ let navegoDentro = false;             // si se llego a la ficha desde la pagina,
 let pestanaMovers = "suben";
 let moversAbiertos = false;          // en la portada los movers van plegados
 const abiertos = new Set();          // grupos con "Ver mas" abierto
+const TOGR = nuevoTog();             // toggles de color / tipo / acabado / rareza de los resultados
 
 const ICONO_CAMARA = `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><rect x="8.5" y="7" width="7" height="10" rx="1"/></svg>`;
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -104,7 +106,10 @@ function vistaResultados(q) {
     return `<div class="vacio"><div class="grande">${esc(t("resultados.sin", { q }))}</div>${esc(t("resultados.sin_ayuda"))}</div>`;
   }
   const { buscar: b } = datos();
-  return grupos.map((g) => {
+  const barra = barraToggles(TOGR, "r");
+  const conFiltro = grupos.map((g) => ({ ...g, imp: g.imp.filter((i) => pasaFila(TOGR, b.imp[i])) })).filter((g) => g.imp.length);
+  if (!conFiltro.length) return `${barra}<div class="vacio">${esc(t("tog.nada"))}</div>`;
+  return barra + conFiltro.map((g) => {
     const abierto = abiertos.has(g.nombre);
     const visibles = abierto ? g.imp : g.imp.slice(0, POR_GRUPO);
     const filas = visibles.map((i) => {
@@ -327,6 +332,8 @@ app.addEventListener("click", (e) => {
   if (e.target.closest("[data-ver-movers]")) { moversAbiertos = !moversAbiertos; actualizarResultados(""); return; }
   const p = e.target.closest("[data-pestana]");
   if (p) { pestanaMovers = p.dataset.pestana; actualizarResultados(""); return; }
+  const tg = e.target.closest(".toggles[data-tog-ns='r'] [data-tog]");
+  if (tg) { alternarTog(TOGR, Number(tg.dataset.tog)); actualizarResultados(document.getElementById("q").value); return; }
   const mas = e.target.closest("[data-grupo]");
   if (mas) { abiertos.add(mas.dataset.grupo); actualizarResultados(document.getElementById("q").value); return; }
   if (e.target.closest(".borrar")) {
