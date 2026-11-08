@@ -1,6 +1,6 @@
 // Arranque, rutas y pantallas. Rutas: #/ (inicio), #/?q=texto (resultados), #/c/<clave> (ficha).
 import { POR_GRUPO, ZONA, DATOS_URL } from "./config.js";
-import { cargar, datos, aPesos, yenAPesos, impresion, filaDe as filaImp, precioFila } from "./datos.js";
+import { cargar, datos, aPesos, yenAPesos, impresion, filaDe as filaImp, precioFila, cargarUniverso, universoListo } from "./datos.js";
 import { prepararIndice, buscar } from "./buscar.js";
 import { cargarIdioma, idiomaActual, t, pesos, moneda, fecha, fechaLarga, porcentaje } from "./i18n.js";
 import { leerAjustes, guardarAjustes, usdMxn, fuentePreferida, FUENTES_PREF, NOMBRE_FUENTE } from "./ajustes.js";
@@ -21,6 +21,28 @@ let pestanaMovers = "suben";
 let moversAbiertos = false;          // en la portada los movers van plegados
 const abiertos = new Set();          // grupos con "Ver mas" abierto
 const TOGR = nuevoTog();             // toggles de color / tipo / acabado / rareza de los resultados
+// controles de los resultados: panel de filtros (cerrado), orden y rango de precio (en pesos, con la fuente preferida)
+const CTL = { panel: false, orden: "rel", min: null, max: null };
+const precioDe = (fila) => precioFila(fila, fuentePreferida()).mxn;
+const pasaPrecio = (fila) => {
+  if (CTL.min == null && CTL.max == null) return true;
+  const v = precioDe(fila);
+  return v != null && (CTL.min == null || v >= CTL.min) && (CTL.max == null || v <= CTL.max);
+};
+const nFiltros = () => TOGR.c.size + TOGR.t.size + TOGR.a.size + TOGR.r.size;
+function controles() {
+  const n = nFiltros();
+  return `<div class="controles">
+      <button type="button" class="ctl-filtros${CTL.panel ? " abierto" : ""}${n ? " activo" : ""}" data-ctl="panel" aria-expanded="${CTL.panel}">
+        ${esc(t("ctl.filtros"))}${n ? ` <b class="num">${n}</b>` : ""} <span aria-hidden="true">${CTL.panel ? "▴" : "▾"}</span></button>
+      <select class="ctl-orden" data-ctl="orden" aria-label="${esc(t("ctl.orden"))}">
+        ${[["rel", "ctl.relevancia"], ["barata", "ctl.barata"], ["cara", "ctl.cara"]].map(([v, k]) => `<option value="${v}"${CTL.orden === v ? " selected" : ""}>${esc(t(k))}</option>`).join("")}
+      </select>
+      <span class="ctl-precio"><input type="number" inputmode="decimal" min="0" step="any" data-ctl="min" placeholder="${esc(t("ctl.desde"))}" value="${CTL.min ?? ""}" aria-label="${esc(t("ctl.desde"))}">
+        <span class="tenue">–</span><input type="number" inputmode="decimal" min="0" step="any" data-ctl="max" placeholder="${esc(t("ctl.hasta"))}" value="${CTL.max ?? ""}" aria-label="${esc(t("ctl.hasta"))}"></span>
+    </div>${CTL.panel ? barraToggles(TOGR, "r") : ""}`;
+}
+function pintarControles() { const c = document.getElementById("controles"); if (c) c.innerHTML = controles(); }
 
 const ICONO_CAMARA = `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><rect x="8.5" y="7" width="7" height="10" rx="1"/></svg>`;
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -106,10 +128,24 @@ function vistaResultados(q) {
     return `<div class="vacio"><div class="grande">${esc(t("resultados.sin", { q }))}</div>${esc(t("resultados.sin_ayuda"))}</div>`;
   }
   const { buscar: b } = datos();
-  const barra = barraToggles(TOGR, "r");
-  const conFiltro = grupos.map((g) => ({ ...g, imp: g.imp.filter((i) => pasaFila(TOGR, b.imp[i])) })).filter((g) => g.imp.length);
-  if (!conFiltro.length) return `${barra}<div class="vacio">${esc(t("tog.nada"))}</div>`;
-  return barra + conFiltro.map((g) => {
+  // universo: las impresiones de menos de $2 de estos nombres llegan aparte; al llegar se vuelve a pintar
+  const faltan = grupos.filter((g) => !universoListo(g.nombre)).map((g) => g.nombre);
+  if (faltan.length) cargarUniverso(faltan).then(() => { const i = document.getElementById("q"); if (i && i.value === q) actualizarResultados(q); });
+  const pasa = (i) => pasaFila(TOGR, b.imp[i]) && pasaPrecio(b.imp[i]);
+  if (CTL.orden !== "rel") {                       // por precio: una sola lista con todas las impresiones de lo buscado
+    const todas = [];
+    for (const g of grupos) for (const i of g.imp) if (pasa(i)) todas.push([i, g.nombre, precioDe(b.imp[i])]);
+    todas.sort((x, y) => (x[2] == null) - (y[2] == null) || (CTL.orden === "barata" ? x[2] - y[2] : y[2] - x[2]));
+    if (!todas.length) return faltan.length ? `<div class="cargando"></div>` : `<div class="vacio">${esc(t("tog.nada"))}</div>`;
+    return `<ul class="lista">${todas.slice(0, 150).map(([i, nombre]) => {
+      const [k, set, num, acab, idioma] = b.imp[i];
+      return filaDe(k, nombre, `${set.toUpperCase()} #${num} · ${t(`acabado.${acab}`)} · ${idioma.toUpperCase()}`, precioHtml(b.imp[i]));
+    }).join("")}</ul>${todas.length > 150 ? `<p class="tenue centro">${esc(t("ctl.primeras", { n: 150, total: todas.length }))}</p>` : ""}${faltan.length ? `<div class="cargando"></div>` : ""}`;
+  }
+  const conFiltro = grupos.map((g) => ({ ...g, imp: g.imp.filter(pasa) })).filter((g) => g.imp.length || !universoListo(g.nombre));
+  if (!conFiltro.length) return `<div class="vacio">${esc(t("tog.nada"))}</div>`;
+  return conFiltro.map((g) => {
+    if (!g.imp.length) return `<section class="grupo"><p class="grupo-nombre">${esc(g.nombre)}</p><div class="cargando"></div></section>`;
     const abierto = abiertos.has(g.nombre);
     const visibles = abierto ? g.imp : g.imp.slice(0, POR_GRUPO);
     const filas = visibles.map((i) => {
@@ -293,7 +329,7 @@ function pintarInicio(q) {
   app.innerHTML = portada
     ? `<section class="portada">${logoSvg("logo-grande", 132)}<h1 class="nombre">Stack</h1>
         ${buscador(q)}${estadoDelDia()}${cv.accesosPortada()}</section><div id="contenido">${vistaPortadaExtra()}</div>`
-    : `${buscador(q)}${estadoDelDia()}<div id="contenido">${vistaResultados(q)}</div>`;
+    : `${buscador(q)}${estadoDelDia()}<div id="controles">${controles()}</div><div id="contenido">${vistaResultados(q)}</div>`;
   if (portada) llenarArticulos();
   const input = document.getElementById("q");
   if (matchMedia("(min-width: 720px)").matches || q) {
@@ -320,6 +356,17 @@ function pintar() {
   else pintarInicio(r.q);
 }
 
+app.addEventListener("change", (e) => {
+  const c = e.target.closest("[data-ctl='orden']");
+  if (c) { CTL.orden = c.value; actualizarResultados(document.getElementById("q").value); }
+});
+app.addEventListener("input", (e) => {
+  const c = e.target.closest("[data-ctl='min'], [data-ctl='max']");
+  if (!c) return;
+  const v = c.value.trim() === "" ? null : Number(c.value);
+  CTL[c.dataset.ctl] = Number.isFinite(v) ? v : null;
+  actualizarResultados(document.getElementById("q").value);
+});
 // La busqueda va en la URL (replaceState: no llena el historial con cada letra).
 app.addEventListener("input", (e) => {
   if (e.target.id !== "q") return;
@@ -333,7 +380,8 @@ app.addEventListener("click", (e) => {
   const p = e.target.closest("[data-pestana]");
   if (p) { pestanaMovers = p.dataset.pestana; actualizarResultados(""); return; }
   const tg = e.target.closest(".toggles[data-tog-ns='r'] [data-tog]");
-  if (tg) { alternarTog(TOGR, Number(tg.dataset.tog)); actualizarResultados(document.getElementById("q").value); return; }
+  if (tg) { alternarTog(TOGR, Number(tg.dataset.tog)); pintarControles(); actualizarResultados(document.getElementById("q").value); return; }
+  if (e.target.closest("[data-ctl='panel']")) { CTL.panel = !CTL.panel; pintarControles(); return; }
   const mas = e.target.closest("[data-grupo]");
   if (mas) { abiertos.add(mas.dataset.grupo); actualizarResultados(document.getElementById("q").value); return; }
   if (e.target.closest(".borrar")) {
@@ -381,18 +429,61 @@ window.addEventListener("hashchange", (ev) => {
 });
 
 // ---------- Escaner ----------
+// En cadena: cada carta que el escaner reconoce entra sola al LOTE (abajo, con el total). Al final, TERMINAR pregunta
+// a donde mandarlas: a un inventario de la cuenta o a un codigo para compartir (se abre en la app o en esta pagina).
 let escanerAbierto = false;
+const LOTE_LLAVE = "stack.lote";
+const ACAB_INV = { n: "nonfoil", f: "foil", e: "etched" };
+let lote = leerLote();                // [{k, nombre, set, num, acab, idioma, q}]
+let enPanel = null;                   // {id, k}: la carta del panel y la entrada del lote que le toca
+
+function leerLote() {
+  try { const v = JSON.parse(localStorage.getItem(LOTE_LLAVE) || "[]"); return Array.isArray(v) ? v.filter((x) => x && x.k && x.q > 0) : []; }
+  catch { return []; }
+}
+function guardarLote() { try { localStorage.setItem(LOTE_LLAVE, JSON.stringify(lote)); } catch { /* sin almacenamiento: vive mientras la pagina este abierta */ } }
+function sumarAlLote(fila, nombre, n = 1) {
+  const e = lote.find((x) => x.k === fila[0]);
+  if (e) e.q += n;
+  else if (n > 0) lote.push({ k: fila[0], nombre, set: fila[1], num: fila[2], acab: fila[3], idioma: fila[4], q: n });
+  lote = lote.filter((x) => x.q > 0);
+  guardarLote();
+}
+const nCartas = (n) => (n === 1 ? t("lote.una_carta") : t("lote.n_cartas", { n }));
+const enLote = (k) => lote.find((x) => x.k === k)?.q || 0;
+function totalLote() {
+  let piezas = 0, mxn = 0, sin = 0;
+  for (const e of lote) {
+    piezas += e.q;
+    const v = precioFila(filaImp(e.k), fuentePreferida()).mxn;
+    if (v == null) sin += e.q; else mxn += v * e.q;
+  }
+  return { piezas, mxn, sin };
+}
 
 function salirEscaner() {
   if (!escanerAbierto) return;
   escanerAbierto = false;
   escaner.cerrarCamara();
+  enPanel = null;
   document.body.classList.remove("en-escaner");
   document.getElementById("escaner")?.remove();
 }
 
 function precioRapido(fila) {
   return pesos(precioFila(fila, fuentePreferida()).mxn);
+}
+const nombreDeFila = (fila) => datos().buscar.nombres.find((n) => n[2].some((i) => datos().buscar.imp[i] === fila))?.[0] || "";
+
+function pintarBarraLote() {
+  const cont = document.getElementById("escaner"), barra = document.getElementById("esc-lote");
+  if (!cont || !barra) return;
+  const tot = totalLote();
+  cont.classList.toggle("con-lote", lote.length > 0);
+  barra.hidden = !lote.length;
+  barra.innerHTML = `<button type="button" class="lote-resumen" data-lote="ver"><span class="tenue">${esc(t("lote.titulo"))}</span>
+      <b class="num">${esc(nCartas(tot.piezas))} · ${pesos(tot.mxn)}</b></button>
+    <button type="button" class="primario lote-terminar" data-lote="terminar">${esc(t("lote.terminar"))}</button>`;
 }
 
 async function pintarResultado(panel, res, elegido = null) {
@@ -401,28 +492,46 @@ async function pintarResultado(panel, res, elegido = null) {
   if (!filas.length) { panel.innerHTML = `<div class="res-vacio">${esc(t("escaner.sin_precio"))}</div>`; panel.hidden = false; return; }
   const fila = elegido || filas.find((f) => f[3] === "n") || filas[0];
   const [k, set, num, acab] = fila;
-  const nombre = datos().buscar.nombres.find((n) => n[2].some((i) => datos().buscar.imp[i] === fila))?.[0] || "";
+  const nombre = nombreDeFila(fila);
+  // en cadena: una carta nueva entra al lote; si en el panel se cambia el acabado o la edicion, se cambia la del lote
+  if (!enPanel || enPanel.id !== res.id) { sumarAlLote(fila, nombre); enPanel = { id: res.id, k }; }
+  else if (enPanel.k !== k) {
+    const n = enLote(enPanel.k) ? 1 : 0;                         // si la quitaron del lote, sigue fuera
+    if (n) sumarAlLote([enPanel.k], "", -1);
+    sumarAlLote(fila, nombre, n);
+    enPanel.k = k;
+  }
+  pintarBarraLote();
+  const q = enLote(k);
   const acabados = filas.map((f) => `<button type="button" class="chip-acab ${f === fila ? "activo" : ""}" data-acab="${esc(f[0])}">${esc(t(`acabado.${f[3]}`))} · ${precioRapido(f)}</button>`).join("");
+  // otras ediciones: pocas a la vista para no tapar la camara (todas si la edicion es dudosa o se pidio "mas")
+  const visibles = res.dudosa || res.todasOtras ? res.otras : res.otras.slice(0, 5);
   const otras = res.otras.flat().length
-    ? `<div class="res-otras"><span class="tenue">${esc(t("escaner.otras"))}</span> ${res.otras.map((fs) => `<button type="button" class="chip-acab" data-otra="${esc(fs[0][0])}">${esc(fs[0][1].toUpperCase())} #${esc(fs[0][2])}</button>`).join("")}</div>`
+    ? `<div class="res-otras">${res.dudosa ? `<span class="aviso-ed">${esc(t("escaner.dudosa"))}</span>` : `<span class="tenue">${esc(t("escaner.otras"))}</span>`} ${visibles.map((fs) => `<button type="button" class="chip-acab" data-otra="${esc(fs[0][0])}">${esc(fs[0][1].toUpperCase())} #${esc(fs[0][2])}${fs[0].u ? " · &lt;$2" : ""}</button>`).join("")}${visibles.length < res.otras.length ? `<button type="button" class="chip-acab" data-mas-ed>+${res.otras.length - visibles.length}</button>` : ""}</div>`
     : "";
   panel.innerHTML = `<a class="res-fila" href="#/c/${encodeURIComponent(k)}">
       <img src="${miniatura(k)}" alt="">
       <div class="medio"><div class="titulo">${esc(nombre)}</div><div class="sub">${esc(set.toUpperCase())} #${esc(num)} · ${esc(t(`acabado.${acab}`))}</div></div>
       <div class="der"><div class="res-precio num">${precioRapido(fila)}</div><div class="tiendas">${NOMBRE_FUENTE[precioFila(fila, fuentePreferida()).fuente]}</div></div></a>
     <div class="res-tiendas num" id="res-tiendas"></div>
+    <div class="res-lote">${q
+      ? `<span class="ok">✓ ${esc(t("lote.en_lote", { n: q }))}</span><button type="button" class="chip-acab" data-q="-1" aria-label="${esc(t("lote.menos"))}">−</button><button type="button" class="chip-acab" data-q="1" aria-label="${esc(t("lote.mas"))}">+</button>`
+      : `<span class="tenue">${esc(t("lote.quitada"))}</span><button type="button" class="chip-acab" data-q="1">${esc(t("lote.volver"))}</button>`}</div>
     <div class="res-acabados">${acabados}</div>${otras}`;
   panel.hidden = false;
   panel.classList.remove("anterior");
   panel.onclick = (e) => {
+    const bq = e.target.closest("[data-q]");
+    if (bq) { e.preventDefault(); sumarAlLote(fila, nombre, Number(bq.dataset.q)); pintarResultado(panel, res, fila); return; }
     const b = e.target.closest("[data-acab]");
     if (b) { e.preventDefault(); pintarResultado(panel, res, filas.find((f) => f[0] === b.dataset.acab)); return; }
+    if (e.target.closest("[data-mas-ed]")) { e.preventDefault(); pintarResultado(panel, { ...res, todasOtras: true }, fila); return; }
     const o = e.target.closest("[data-otra]");
     if (o) {
       e.preventDefault();
       const sid = o.dataset.otra.split(":")[0];
       const grupo = res.otras.find((fs) => fs[0][0].startsWith(sid));
-      const nuevo = { ...res, filas: grupo, otras: [res.filas, ...res.otras.filter((fs) => fs !== grupo)] };
+      const nuevo = { ...res, dudosa: false, filas: grupo, otras: [res.filas, ...res.otras.filter((fs) => fs !== grupo)] };
       pintarResultado(panel, nuevo);
     }
   };
@@ -440,9 +549,122 @@ async function pintarResultado(panel, res, elegido = null) {
   } catch { /* sin precios de tienda: queda solo TCG */ }
 }
 
+// ---- hojas del lote: VER (lista con cantidades) y TERMINAR (a un inventario o a un codigo)
+function abrirHoja(cual) {
+  const hoja = document.getElementById("esc-hoja");
+  if (!hoja) return;
+  escaner.pausar(true);
+  hoja.hidden = false;
+  hoja.dataset.cual = cual;
+  if (cual === "ver") pintarHojaLote(hoja); else pintarTerminar(hoja);
+}
+function cerrarHoja() {
+  const hoja = document.getElementById("esc-hoja");
+  if (!hoja || hoja.hidden) return;
+  hoja.hidden = true; hoja.innerHTML = "";
+  escaner.pausar(false);
+  pintarBarraLote();
+  const panel = document.getElementById("esc-panel");
+  if (panel && !lote.length) panel.hidden = true;
+}
+const cabezaHoja = (titulo) => `<div class="hoja-cabeza"><h2>${esc(titulo)}</h2><button type="button" class="cerrar" data-hoja="cerrar" aria-label="${esc(t("ajustes.cerrar"))}">✕</button></div>`;
+
+function pintarHojaLote(hoja) {
+  const tot = totalLote();
+  if (!lote.length) { cerrarHoja(); return; }
+  hoja.innerHTML = `<div class="hoja-cuerpo">${cabezaHoja(t("lote.titulo"))}
+    <div class="lote-total num"><span>${esc(nCartas(tot.piezas))}</span><b>${pesos(tot.mxn)}</b></div>
+    ${tot.sin ? `<p class="tenue">${esc(t("lote.sin_precio", { n: tot.sin }))}</p>` : ""}
+    <ul class="lista lote-lista">${lote.map((e, i) => {
+      const v = precioFila(filaImp(e.k), fuentePreferida()).mxn;
+      return `<li class="fila"><img src="${miniatura(e.k)}" alt="" loading="lazy">
+        <div class="medio"><div class="titulo">${esc(e.nombre)}</div><div class="sub">${esc(String(e.set).toUpperCase())} #${esc(e.num)} · ${esc(t(`acabado.${e.acab}`))} · ${pesos(v)}</div></div>
+        <div class="lote-q"><button type="button" class="chip-acab" data-i="${i}" data-d="-1" aria-label="${esc(t("lote.menos"))}">−</button>
+          <b class="num">${e.q}</b><button type="button" class="chip-acab" data-i="${i}" data-d="1" aria-label="${esc(t("lote.mas"))}">+</button>
+          <button type="button" class="chip-acab" data-i="${i}" data-d="x" aria-label="${esc(t("lote.quitar"))}">✕</button></div></li>`;
+    }).join("")}</ul>
+    <button type="button" class="primario ancho" data-hoja="terminar">${esc(t("lote.terminar"))}</button>
+    <button type="button" class="boton-vacio ancho" data-hoja="vaciar">${esc(t("lote.vaciar"))}</button></div>`;
+}
+
+async function pintarTerminar(hoja, aviso = "") {
+  const tot = totalLote();
+  if (!lote.length) { cerrarHoja(); return; }
+  const conCuenta = cv.sesionActiva();
+  hoja.innerHTML = `<div class="hoja-cuerpo">${cabezaHoja(t("lote.terminar_titulo"))}
+    <p class="lote-total num"><span>${esc(nCartas(tot.piezas))}</span><b>${pesos(tot.mxn)}</b></p>
+    ${aviso}
+    <section class="aj-grupo"><h3 class="aj-tit">${esc(t("lote.a_inventario"))}</h3><div id="lote-inv">${conCuenta ? `<div class="cargando"></div>`
+      : `<p class="tenue">${esc(t("lote.entra"))}</p><a class="boton-vacio" href="#/cuenta">${esc(t("cuenta.entrar"))}</a>`}</div></section>
+    <section class="aj-grupo"><h3 class="aj-tit">${esc(t("lote.compartir"))}</h3><div id="lote-cod">
+      <p class="tenue">${esc(t("lote.compartir_ayuda"))}</p>
+      <button type="button" class="primario ancho" data-hoja="codigo">${esc(t("lote.crear_codigo"))}</button></div></section>
+    <button type="button" class="boton-vacio ancho" data-hoja="ver">${esc(t("lote.revisar"))}</button></div>`;
+  if (!conCuenta) return;
+  const caja = hoja.querySelector("#lote-inv");
+  let invs;
+  try { invs = await cv.inventariosCuenta(); } catch (e) { caja.innerHTML = `<p class="error">${esc(cv.mensajeCuenta(e))}</p>`; return; }
+  if (!hoja.contains(caja)) return;
+  const opciones = invs.length
+    ? invs.map((i) => `<option value="${esc(i.tipo)}">${esc(i.nombre === "(default)" ? t("inv.default") : i.nombre)}</option>`).join("")
+    : `<option value="">${esc(t("inv.default"))}</option>`;
+  caja.innerHTML = `<label class="lote-sel">${esc(t("inv.inventario"))}<select id="lote-destino">${opciones}</select></label>
+    <button type="button" class="primario ancho" data-hoja="inventario">${esc(tot.piezas === 1 ? t("lote.anadir_1") : t("lote.anadir", { n: tot.piezas }))}</button>
+    <p class="tenue" id="lote-inv-msg" role="status"></p>`;
+}
+
+async function accionHoja(hoja, accion, boton) {
+  if (accion === "cerrar") { cerrarHoja(); return; }
+  if (accion === "ver") { hoja.dataset.cual = "ver"; pintarHojaLote(hoja); return; }
+  if (accion === "terminar") { hoja.dataset.cual = "terminar"; pintarTerminar(hoja); return; }
+  if (accion === "vaciar") {
+    if (boton.dataset.seguro !== "1") { boton.dataset.seguro = "1"; boton.textContent = t("lote.vaciar_seguro"); return; }
+    lote = []; guardarLote(); enPanel = null; cerrarHoja(); return;
+  }
+  if (accion === "inventario") {
+    const msg = hoja.querySelector("#lote-inv-msg"), sel = hoja.querySelector("#lote-destino");
+    boton.disabled = true; msg.className = "tenue"; msg.textContent = t("inv.agregando");
+    try {
+      const lineas = lote.map((e) => ({ sid: e.k.split(":")[0], acab: ACAB_INV[e.acab] || "nonfoil", nombre: e.nombre, set: e.set, numero: e.num, cantidad: e.q }));
+      const piezas = lote.reduce((s, e) => s + e.q, 0);
+      const nombreInv = await cv.agregarVarias(sel.value, lineas);
+      lote = []; guardarLote(); enPanel = null;
+      const panel = document.getElementById("esc-panel"); if (panel) panel.hidden = true;
+      hoja.innerHTML = `<div class="hoja-cuerpo">${cabezaHoja(t("lote.listo"))}
+        <p class="ok">${esc(t("lote.anadidas", { n: piezas, inv: nombreInv === "(default)" ? t("inv.default") : nombreInv }))}</p>
+        <button type="button" class="primario ancho" data-hoja="cerrar">${esc(t("lote.seguir"))}</button></div>`;
+    } catch (e) {
+      boton.disabled = false; msg.className = "error"; msg.textContent = cv.mensajeCuenta(e);
+    }
+    return;
+  }
+  if (accion === "codigo") {
+    const caja = hoja.querySelector("#lote-cod");
+    boton.disabled = true; boton.textContent = t("lote.creando");
+    const m = datos().manifest;
+    const doc = { esquema: 1, tipo: "inventario", nombre: t("lote.nombre_doc", { fecha: fecha(hoyMexico()) }), creado: new Date().toISOString().slice(0, 19) + "+00:00",
+      app: "web", de: null, con_costos: false, fecha_precios: datos().diaUsado, tasa_usd_mxn: usdMxn(m).valor ?? null,
+      piezas: lote.map((e) => ({ sid: e.k.split(":")[0], acab: ACAB_INV[e.acab] || "nonfoil", nombre: e.nombre, set: e.set, numero: e.num,
+        idioma: e.idioma || null, cantidad: e.q, usd: filaImp(e.k)?.[5] ?? null })) };
+    try {
+      const r = await cv.crearCodigo(doc);
+      const enlace = `${location.origin}${location.pathname}#/s/${r.codigo}`;
+      caja.innerHTML = `<div class="lote-codigo num" id="lote-codigo">${esc(r.codigo)}</div>
+        <p class="tenue">${esc(t("lote.codigo_ayuda", { fecha: fecha(String(r.expira || "").slice(0, 10)) }))}</p>
+        <div class="lote-botones"><button type="button" class="boton-vacio" data-copiar="${esc(r.codigo)}">${esc(t("lote.copiar_codigo"))}</button>
+          <button type="button" class="boton-vacio" data-copiar="${esc(enlace)}">${esc(t("lote.copiar_enlace"))}</button></div>
+        <p class="tenue" id="lote-cod-msg" role="status"></p>`;
+    } catch (e) {
+      boton.disabled = false; boton.textContent = t("lote.crear_codigo");
+      const p = document.createElement("p"); p.className = "error"; p.textContent = cv.mensajeCodigo(e); caja.appendChild(p);
+    }
+  }
+}
+
 async function vistaEscaner() {
   if (escanerAbierto) return;
   escanerAbierto = true;
+  enPanel = null;
   document.body.classList.add("en-escaner");
   const cont = document.createElement("section");
   cont.id = "escaner";
@@ -450,14 +672,42 @@ async function vistaEscaner() {
     <div class="guia-capa"><div class="guia"></div></div>
     <a class="esc-cerrar" href="#/" data-atras aria-label="${esc(t("ajustes.cerrar"))}">✕</a>
     <div class="esc-estado" id="esc-estado">${esc(t("escaner.preparando"))}</div>
-    <div class="esc-panel" id="esc-panel" hidden></div>`;
+    <div class="esc-panel" id="esc-panel" hidden></div>
+    <div class="esc-lote" id="esc-lote" hidden></div>
+    <div class="esc-hoja" id="esc-hoja" hidden></div>`;
   document.body.appendChild(cont);
   cont.querySelector("[data-atras]").addEventListener("click", (e) => {
     if (navegoDentro) { e.preventDefault(); history.back(); }
   });
+  cont.querySelector("#esc-lote").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-lote]");
+    if (b) abrirHoja(b.dataset.lote);
+  });
+  const hoja = cont.querySelector("#esc-hoja");
+  hoja.addEventListener("click", async (e) => {
+    const cp = e.target.closest("[data-copiar]");
+    if (cp) {
+      const msg = hoja.querySelector("#lote-cod-msg");
+      try { await navigator.clipboard.writeText(cp.dataset.copiar); if (msg) { msg.className = "ok"; msg.textContent = t("lote.copiado"); } }
+      catch { if (msg) { msg.className = "error"; msg.textContent = t("lote.no_copiado"); } }
+      return;
+    }
+    const q = e.target.closest("[data-i]");
+    if (q) {
+      const ent = lote[Number(q.dataset.i)];
+      if (ent) { ent.q = q.dataset.d === "x" ? 0 : ent.q + Number(q.dataset.d); lote = lote.filter((x) => x.q > 0); guardarLote(); }
+      pintarHojaLote(hoja);
+      return;
+    }
+    const b = e.target.closest("[data-hoja]");
+    if (b) accionHoja(hoja, b.dataset.hoja, b);
+  });
+  // el lote de otra vez (guardado en este navegador): sus impresiones de < $2 se bajan para tener precio
+  if (lote.length) cargarUniverso([...new Set(lote.map((e) => e.nombre))]).then(pintarBarraLote);
+  pintarBarraLote();
   const estado = cont.querySelector("#esc-estado"), panel = cont.querySelector("#esc-panel");
   const guia = cont.querySelector(".guia");
-  const textos = { buscando: t("escaner.buscando"), leyendo: t("escaner.leyendo"), listo: t("escaner.listo"), dificil: t("escaner.dificil") };
+  const textos = { buscando: t("escaner.buscando"), leyendo: t("escaner.leyendo"), listo: t("escaner.listo"), dificil: t("escaner.dificil"), reflejo: t("escaner.reflejo") };
   try {
     await escaner.preparar((paso) => { estado.textContent = t(`escaner.cargando_${paso}`); });
     if (!escanerAbierto) return;

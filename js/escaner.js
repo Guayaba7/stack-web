@@ -12,7 +12,7 @@
 //      texto oficial de los candidatos visuales (de Scryfall); si dos cartas distintas empatan, no adivina.
 // Una vez fijada una carta no cambia sola: solo cambia si se lee con seguridad otro nombre o si la carta sale del recuadro.
 import { DATOS_URL } from "./config.js";
-import { datos } from "./datos.js";
+import { datos, cargarUniverso, universoListo } from "./datos.js";
 import { normalizar } from "./buscar.js";
 import * as scry from "./scryfall.js";
 
@@ -42,6 +42,10 @@ const SIN_CARTA_PARA_SOLTAR = 4;                           // cuadros seguidos s
 const OTRA_CARTA = 0.55;                                   // parecido visual con la carta fijada por debajo = ya es otra
 const SOLO_IMAGEN_MARGEN = 0.06;                           // ultimo recurso (sin texto legible): margen visual muy alto
 const SOLO_IMAGEN_TRAS_MS = 2500;                          // ... y solo despues de este tiempo sin poder leer texto
+const REFLEJO = 0.05;                                      // fraccion de pixeles quemados en la barra del nombre = hay reflejo
+const VISUAL_DUDOSO = 0.55;                                // la mejor edicion con huella se parece poco: puede ser una de < $2
+const VISUAL_FUERTE = 0.78;                                // la imagen apunta con claridad a una carta
+const QUIETA = 7;                                          // diferencia media (0-255) entre cuadros: la carta no se movio
 
 let ort = null, sesion = null, indice = null, lector = null, letras = null, nombres = null;
 let lectorJa = null, nombresJa = null, cargandoJa = null;     // lector y nombres en japones
@@ -56,6 +60,7 @@ const lienzoRed = document.createElement("canvas"); lienzoRed.width = LADO_RED; 
 const ctxRed = lienzoRed.getContext("2d", { willReadFrequently: true });
 const lienzoOcr = document.createElement("canvas");
 const depurar = location.hostname === "localhost";
+const PLANO = depurar ? (new URLSearchParams(location.search).get("plano") || "auto") : "auto";   // pruebas: auto | siempre | nunca
 if (depurar) window.__stackDepurar = { lienzo, lienzoCarta, lienzoOcr, eventos: [] };
 
 function nuevoEstado() {
@@ -69,6 +74,8 @@ function nuevoEstado() {
     distinta: 0,            // cuadros seguidos en que la imagen ya no se parece a la fijada
     desde: performance.now(),
     ultimaQ: null,
+    reflejos: 0,            // lecturas seguidas con reflejo en el nombre
+    mini: null,             // miniatura del cuadro anterior (para no recalcular la huella si la carta no se movio)
   };
 }
 
@@ -137,12 +144,23 @@ export async function preparar(progreso = () => {}) {
   const v = d.manifest?.vision;
   if (!v) throw new Error("sin_vision");
   progreso("motor");
-  ort = await cargarScript(`${ORT_URL}ort.min.js`, "ort");
+  // Con WebGPU (Chrome/Edge en Android y escritorio) la huella visual corre en la tarjeta grafica; si no, en el procesador.
+  // Varios hilos solo se pueden si la pagina esta "aislada" (GitHub Pages no lo permite; otro servidor si).
+  let gpu = false;
+  try { gpu = !!(navigator.gpu && await navigator.gpu.requestAdapter()); } catch { gpu = false; }
+  ort = await cargarScript(`${ORT_URL}${gpu ? "ort.webgpu.min.js" : "ort.min.js"}`, "ort").catch(() => cargarScript(`${ORT_URL}ort.min.js`, "ort"));
   ort.env.wasm.wasmPaths = ORT_URL;
-  ort.env.wasm.numThreads = 1;
+  ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 1) : 1;
   const prometeLector = lector ? Promise.resolve(lector) : prepararLector();       // en paralelo con lo demas
   progreso("modelo");
-  if (!sesion) sesion = await ort.InferenceSession.create(`${DATOS_URL}${v.modelo}`, { executionProviders: ["wasm"], graphOptimizationLevel: "all" });
+  if (!sesion) {
+    const url = `${DATOS_URL}${v.modelo}`;
+    if (gpu && ort.env.webgpu) {
+      try { sesion = await ort.InferenceSession.create(url, { executionProviders: ["webgpu"], graphOptimizationLevel: "all" }); anotar("motor", "webgpu"); }
+      catch (e) { anotar("motor", "sin webgpu", String(e)); }
+    }
+    if (!sesion) sesion = await ort.InferenceSession.create(url, { executionProviders: ["wasm"], graphOptimizationLevel: "all" });
+  }
   progreso("indice");
   if (!indice) {
     const base = `${DATOS_URL}${d.diaUsado}/`;
@@ -153,14 +171,8 @@ export async function preparar(progreso = () => {}) {
     indice = { dims: meta.dims, ids: meta.ids, vec: new Int8Array(bin), pos: new Map(meta.ids.map((s, i) => [s, i])) };
     indice.porSid = new Map();
     indice.grupoDeSid = new Map();
-    d.buscar.nombres.forEach(([, , imps], grupo) => {
-      for (const i of imps) {
-        const fila = d.buscar.imp[i], sid = fila[0].split(":")[0];
-        if (!indice.porSid.has(sid)) indice.porSid.set(sid, []);
-        indice.porSid.get(sid).push(fila);
-        indice.grupoDeSid.set(sid, grupo);
-      }
-    });
+    indice.vistas = new Map();                                    // grupo -> cuantas impresiones ya estan en porSid
+    d.buscar.nombres.forEach((_, grupo) => sumarGrupo(grupo));
     nombres = prepararNombres(d.buscar);
     nombresJa = [];
     d.buscar.nombres.forEach((fila, grupo) => { for (const t of (fila[3] || "").split("|")) if (t.length >= 2) nombresJa.push({ t, grupo }); });
@@ -168,6 +180,24 @@ export async function preparar(progreso = () => {}) {
   progreso("lector");
   lector = await prometeLector;
   if (nombresJa.length) setTimeout(cargarJapones, 1500);        // listo antes de que alguien ponga una carta japonesa
+}
+
+// Lleva a porSid las impresiones de un nombre (las del universo < $2 llegan despues, al bajar su trozo).
+function sumarGrupo(grupo) {
+  const d = datos(), imps = d.buscar.nombres[grupo][2], desde = indice.vistas.get(grupo) || 0;
+  for (let j = desde; j < imps.length; j++) {
+    const fila = d.buscar.imp[imps[j]], sid = fila[0].split(":")[0];
+    if (!indice.porSid.has(sid)) indice.porSid.set(sid, []);
+    indice.porSid.get(sid).push(fila);
+    indice.grupoDeSid.set(sid, grupo);
+  }
+  indice.vistas.set(grupo, imps.length);
+}
+// Baja (si hace falta) las impresiones de menos de $2 de ese nombre.
+async function conUniverso(grupo) {
+  const nombre = datos().buscar.nombres[grupo][0];
+  if (!universoListo(nombre)) await cargarUniverso([nombre]);
+  sumarGrupo(grupo);
 }
 
 // ---------------------------------------------------------------- orillas (mismo algoritmo que orillas.py del job)
@@ -292,8 +322,10 @@ function enderezar(img, W, H, c) {
 }
 
 // Muestra una region de la carta (en fracciones) a una imagen de salida, desde la foto original.
-function muestrear(img, W, H, c, r, outW, outH) {
+// plano = quita la luz dispareja (reflejo, sombra) restando el fondo suavizado antes de estirar el contraste.
+function muestrear(img, W, H, c, r, outW, outH, plano = false) {
   const m = homografia(c), out = new ImageData(outW, outH), o = out.data;
+  let quemados = 0;
   for (let v = 0; v < outH; v++) for (let u = 0; u < outW; u++) {
     const X = (r.x0 + (u + 0.5) / outW * (r.x1 - r.x0)) * CW, Y = (r.y0 + (v + 0.5) / outH * (r.y1 - r.y0)) * CH;
     const z = m[6] * X + m[7] * Y + 1;
@@ -301,13 +333,16 @@ function muestrear(img, W, H, c, r, outW, outH) {
     sx = Math.min(W - 1.001, Math.max(0, sx)); sy = Math.min(H - 1.001, Math.max(0, sy));
     const x0 = sx | 0, y0 = sy | 0, fx = sx - x0, fy = sy - y0, j = (v * outW + u) * 4;
     const i00 = (y0 * W + x0) * 4, i01 = i00 + 4, i10 = i00 + W * 4, i11 = i10 + 4;
-    let g = 0;
+    let g = 0, mn = 255;
     for (let k = 0; k < 3; k++) {
       const val = img[i00 + k] * (1 - fx) * (1 - fy) + img[i01 + k] * fx * (1 - fy) + img[i10 + k] * (1 - fx) * fy + img[i11 + k] * fx * fy;
       g += val * (k === 0 ? 0.299 : k === 1 ? 0.587 : 0.114);
+      if (val < mn) mn = val;
     }
+    if (mn > 245) quemados++;                                   // blanco en los 3 canales: reflejo (la tinta nunca es asi)
     o[j] = o[j + 1] = o[j + 2] = g; o[j + 3] = 255;
   }
+  if (plano) aplanar(o, outW, outH);
   // estirar contraste (1% - 99%) para que el OCR vea letras limpias con poca luz o reflejo
   const hist = new Uint32Array(256);
   for (let j = 0; j < o.length; j += 4) hist[o[j] | 0]++;
@@ -316,7 +351,29 @@ function muestrear(img, W, H, c, r, outW, outH) {
   a = 0; for (let i = 255; i >= 0; i--) { a += hist[i]; if (a > n * 0.01) { hi = i; break; } }
   const esc = 255 / Math.max(1, hi - lo);
   for (let j = 0; j < o.length; j += 4) o[j] = o[j + 1] = o[j + 2] = Math.min(255, Math.max(0, (o[j] - lo) * esc));
+  out.reflejo = quemados / n;
   return out;
+}
+
+// Resta el fondo (promedio en una ventana del tamano de la letra x2) y deja el nivel medio: un reflejo que aclara media barra
+// o una sombra que la oscurece ya no se comen las letras al estirar el contraste.
+function aplanar(o, w, h) {
+  const R = Math.max(4, Math.round(h * 0.9)), ii = new Float64Array((w + 1) * (h + 1));
+  let total = 0;
+  for (let y = 0; y < h; y++) {
+    let fila = 0;
+    for (let x = 0; x < w; x++) { const v = o[(y * w + x) * 4]; fila += v; total += v; ii[(y + 1) * (w + 1) + x + 1] = ii[y * (w + 1) + x + 1] + fila; }
+  }
+  const medio = total / (w * h), g = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) {
+    const y0 = Math.max(0, y - R), y1 = Math.min(h, y + R + 1);
+    for (let x = 0; x < w; x++) {
+      const x0 = Math.max(0, x - R), x1 = Math.min(w, x + R + 1);
+      const s = ii[y1 * (w + 1) + x1] - ii[y0 * (w + 1) + x1] - ii[y1 * (w + 1) + x0] + ii[y0 * (w + 1) + x0];
+      g[y * w + x] = o[(y * w + x) * 4] - s / ((y1 - y0) * (x1 - x0)) + medio;
+    }
+  }
+  for (let i = 0; i < g.length; i++) o[i * 4] = o[i * 4 + 1] = o[i * 4 + 2] = Math.min(255, Math.max(0, g[i]));
 }
 
 // ---------------------------------------------------------------- huella visual y busqueda
@@ -432,31 +489,63 @@ function emparejarNombre(texto, ja = false) {
   return { grupo, s: porGrupo.get(grupo), segundo, leido };
 }
 
+function visualDeGrupo(p, grupo) {
+  let m = -1;
+  for (const i of datos().buscar.nombres[grupo][2]) {
+    const sid = datos().buscar.imp[i][0].split(":")[0];
+    if (indice.pos.has(sid)) m = Math.max(m, p[indice.pos.get(sid)]);
+  }
+  return m;
+}
+function contradice(r) {
+  const p = promedio();
+  if (!p) return null;
+  const propio = visualDeGrupo(p, r.grupo);
+  // con un solo cuadro todavia no se sabe; si el nombre leido casi no se parece a la imagen, se espera al siguiente
+  if (estado.ventana.length < 2) return propio >= 0 && propio < 0.5 ? { grupo: null, s: 0, parcial: false } : null;
+  const [j, s] = mejores(p, 1)[0], grupo = indice.grupoDeSid.get(indice.ids[j]);
+  if (grupo === r.grupo || s < VISUAL_FUERTE) return null;
+  const suyo = normalizar(datos().buscar.nombres[grupo][0]), leido = r.leido.trim();
+  const parcial = leido.replace(/ /g, "").length >= 4 && suyo !== leido && suyo.includes(leido);
+  if (parcial && s > propio) return { grupo, s, parcial };
+  return propio < s - 0.15 ? { grupo, s, parcial: false } : null;
+}
+
 // La edicion: entre las impresiones de ese nombre, la que mas se parece en imagen (promedio de los ultimos cuadros).
 function elegirEdicion(grupo) {
   const d = datos(), imps = d.buscar.nombres[grupo][2];
   const sids = [...new Set(imps.map((i) => d.buscar.imp[i][0].split(":")[0]))];
   const p = promedio();
+  if (!sids.length) return null;
   const conPuntaje = sids.map((sid) => [sid, p && indice.pos.has(sid) ? p[indice.pos.get(sid)] : -1]).sort((x, y) => y[1] - x[1]);
   const top = conPuntaje[0];
   const parecidas = conPuntaje.filter(([, s]) => top[1] - s < IGUALES).map(([sid]) => sid);
-  return { sid: top[0], parecidas, todas: conPuntaje.map(([sid]) => sid) };
+  // Las impresiones de menos de $2 no tienen huella visual: si la mejor con huella se parece poco, la buena puede ser
+  // una de ellas. Entonces decide el codigo de coleccion, o la persona entre las ediciones.
+  const sinHuella = sids.filter((sid) => !indice.pos.has(sid)).length;
+  const dudosa = sinHuella > 0 && (top[1] < VISUAL_DUDOSO || sinHuella === sids.length);
+  return { sid: top[0], parecidas, todas: conPuntaje.map(([sid]) => sid), dudosa, puntaje: top[1] };
 }
 
-function fijar(grupo, por) {
+async function fijar(grupo, por) {
+  const est = estado;
+  await conUniverso(grupo);                                       // ya suele estar: se pide al primer voto del nombre
+  if (!corriendo || est !== estado) return;
   const ed = elegirEdicion(grupo);
-  estado.fijada = { grupo, sid: ed.sid, desde: performance.now(), por, q: null };   // referencia: el siguiente cuadro
-  anotar("fijada", datos().buscar.nombres[grupo][0], ed.sid, por);
+  if (!ed) return;
+  estado.fijada = { grupo, sid: ed.sid, desde: performance.now(), por, q: null, dudosa: ed.dudosa };   // q: el siguiente cuadro
+  anotar("fijada", datos().buscar.nombres[grupo][0], ed.sid, por, ed.dudosa ? "dudosa" : "", ed.puntaje.toFixed(3), ed.todas.length);
   if (navigator.vibrate) navigator.vibrate(35);
   alEstado?.("listo");
   publicar(ed);
 }
 
 function publicar(ed) {
-  const otras = ed.todas.filter((s) => s !== ed.sid).slice(0, 8).map((s) => indice.porSid.get(s)).filter(Boolean);
+  const otras = ed.todas.filter((s) => s !== ed.sid).slice(0, ed.dudosa ? 24 : 10).map((s) => indice.porSid.get(s)).filter(Boolean);
   // primero las de imagen casi identica, luego el resto de ediciones del mismo nombre
   otras.sort((a, b) => (ed.parecidas.includes(b[0][0].split(":")[0]) ? 1 : 0) - (ed.parecidas.includes(a[0][0].split(":")[0]) ? 1 : 0));
-  alResultado?.({ sid: ed.sid, filas: indice.porSid.get(ed.sid) || [], otras });
+  const f = estado.fijada;
+  alResultado?.({ sid: ed.sid, filas: indice.porSid.get(ed.sid) || [], otras, dudosa: !!ed.dudosa && !f?.porCodigo, grupo: f?.grupo, id: f?.desde });
 }
 
 // ---------------------------------------------------------------- lecturas de texto (en segundo plano)
@@ -465,7 +554,7 @@ async function leerCodigo(foto) {
   let texto = "";
   for (const r of CODIGO) {
     const ancho = Math.round(OCR.alto * ((r.x1 - r.x0) * CW) / ((r.y1 - r.y0) * CH));
-    const l = await leerLinea(muestrear(img, W, H, c, r, ancho, OCR.alto));
+    const l = await leerLinea(muestrear(img, W, H, c, r, ancho, OCR.alto, true));
     if (l.confianza >= 0.4) texto += " " + l.texto;
   }
   anotar("ocr-codigo", texto.trim());
@@ -491,10 +580,13 @@ function edicionPorCodigo(texto, sids) {
 async function leerNombre(foto, otro = null) {
   const { img, W, H, c } = foto;
   const r = BANDA_NOMBRE, ancho = Math.round(OCR.alto * ((r.x1 - r.x0) * CW) / ((r.y1 - r.y0) * CH));
-  const band = muestrear(img, W, H, c, r, ancho, OCR.alto);
+  // Con reflejo o luz dispareja se lee la barra "aplanada"; si una lectura limpia falla, la siguiente tambien prueba aplanada.
+  const plano = PLANO === "siempre" || (PLANO !== "nunca" && (estado.reflejos > 0 || estado.fallidas % 2 === 1));
+  const band = muestrear(img, W, H, c, r, ancho, OCR.alto, plano);
+  if (band.reflejo > REFLEJO) { estado.reflejos++; menosLuz(); } else estado.reflejos = 0;
   const t0 = performance.now();
   const { texto, confianza } = await leerLinea(band, otro);
-  anotar(otro ? "ocr-nombre-ja" : "ocr-nombre", Math.round(performance.now() - t0), texto, confianza.toFixed(2));
+  anotar(otro ? "ocr-nombre-ja" : "ocr-nombre", Math.round(performance.now() - t0), texto, confianza.toFixed(2), plano ? "plano" : "", band.reflejo.toFixed(3));
   if (depurar) { lienzoOcr.width = band.width; lienzoOcr.height = band.height; lienzoOcr.getContext("2d").putImageData(band, 0, 0); }
   return confianza >= 0.5 ? texto : "";
 }
@@ -561,14 +653,14 @@ async function leer(foto) {
     if (estado.fallidas >= LECTURAS_ANTES_DE_TEXTO && !estado.fijada) {
       const g = await porReglas(foto);
       if (!corriendo || est !== estado) return;
-      if (g != null) { fijar(g, "reglas"); return; }
+      if (g != null) { await fijar(g, "reglas"); return; }
       // ultimo recurso (texto ilegible): solo imagen y con margen muy alto
       if (performance.now() - estado.desde > SOLO_IMAGEN_TRAS_MS) {
         const p = promedio(), top = p && mejores(p, 8);
         if (top) {
           const g0 = indice.grupoDeSid.get(indice.ids[top[0][0]]);
           const otro = top.find(([j]) => indice.grupoDeSid.get(indice.ids[j]) !== g0);
-          if (estado.ventana.length >= VENTANA && top[0][1] - (otro?.[1] ?? 0) >= SOLO_IMAGEN_MARGEN) { fijar(g0, "imagen"); return; }
+          if (estado.ventana.length >= VENTANA && top[0][1] - (otro?.[1] ?? 0) >= SOLO_IMAGEN_MARGEN) { await fijar(g0, "imagen"); return; }
         }
       }
       estado.fallidas = 0;                                        // vuelve a intentar con el nombre
@@ -576,7 +668,7 @@ async function leer(foto) {
     }
     // ya hay carta y tiene varias ediciones: leer el codigo de coleccion (hasta 4 intentos) para elegir la exacta
     const f0 = estado.fijada;
-    if (f0 && !f0.porCodigo && (f0.intentosCodigo ?? 0) < 4) {
+    if (f0 && !f0.porCodigo && (f0.intentosCodigo ?? 0) < (f0.dudosa ? 10 : 4)) {
       const ed = elegirEdicion(f0.grupo);
       if (ed.todas.length > 1) {
         f0.intentosCodigo = (f0.intentosCodigo ?? 0) + 1;
@@ -585,7 +677,7 @@ async function leer(foto) {
         if (sid) {
           f0.porCodigo = true;
           anotar("edicion-por-codigo", sid);
-          if (sid !== f0.sid) { f0.sid = sid; publicar({ ...ed, sid, todas: [sid, ...ed.todas.filter((x) => x !== sid)] }); }
+          if (sid !== f0.sid || f0.dudosa) { f0.sid = sid; f0.dudosa = false; publicar({ ...ed, sid, dudosa: false, todas: [sid, ...ed.todas.filter((x) => x !== sid)] }); }
         }
         if (f0.intentosCodigo % 2 === 1) return;                 // alterna: codigo, nombre, codigo, nombre...
       }
@@ -608,10 +700,21 @@ async function leer(foto) {
       }
       return;
     }
+    // El nombre contradice a la imagen: con un reflejo se lee solo un pedazo ("Apocalypse" de "Sheoldred, the Apocalypse",
+    // "Donate" de "Donatello") y ese pedazo puede ser el nombre de otra carta. Si la imagen apunta fuerte a otra carta:
+    // si lo leido es parte de su nombre, es esa; si no, esta lectura no cuenta.
+    const choque = contradice(r);
+    if (choque) {
+      anotar("contradice", datos().buscar.nombres[r.grupo][0], choque.grupo == null ? "-" : datos().buscar.nombres[choque.grupo][0], choque.s.toFixed(3));
+      if (choque.parcial && estado.fijada?.grupo !== choque.grupo) await fijar(choque.grupo, "nombre+imagen");
+      else if (!choque.parcial) fallo();
+      return;
+    }
+    if (!estado.votos.has(r.grupo)) conUniverso(r.grupo).catch(() => {});   // adelanta las impresiones de < $2 de ese nombre
     const v = estado.votos.get(r.grupo) || { n: 0, mejor: 0 };
     v.n++; v.mejor = Math.max(v.mejor, r.s); estado.votos.set(r.grupo, v);
     const claro = r.s - r.segundo >= 0.08;
-    if ((r.s >= NOMBRE_SEGURO && claro) || (v.n >= 2 && v.mejor >= NOMBRE_DOBLE)) fijar(r.grupo, "nombre");
+    if ((r.s >= NOMBRE_SEGURO && claro) || (v.n >= 2 && v.mejor >= NOMBRE_DOBLE)) await fijar(r.grupo, "nombre");
     else if (r.s < NOMBRE_DOBLE) fallo();
   } catch (e) {
     console.error(e);
@@ -638,6 +741,7 @@ function soltar(motivo) {
   const leyendo = estado.leyendo, habia = !!estado.fijada;
   estado = nuevoEstado(); estado.leyendo = leyendo;
   anotar("suelta", motivo);
+  if (motivo === "sin carta") luzNormal();
   if (habia) alResultado?.(null);
 }
 
@@ -656,7 +760,12 @@ async function cuadro(guia) {
     return;
   }
   estado.sinCarta = 0;
-  const q = await huella(enderezar(img, W, H, c));
+  const carta = enderezar(img, W, H, c);
+  // Carta fija y quieta: no hace falta otra huella (ahorra el paso mas caro de cada cuadro); el texto se sigue leyendo.
+  const mini = miniatura(carta), quieta = estado.mini && diferencia(mini, estado.mini) < QUIETA;
+  estado.mini = mini;
+  if (quieta && estado.fijada?.q && estado.ventana.length >= VENTANA) { lecturaDeTexto(g, W, c); return; }
+  const q = await huella(carta);
   const f = estado.fijada;
   if (f && !f.q) f.q = q;
   else if (f) {
@@ -672,8 +781,12 @@ async function cuadro(guia) {
   estado.ultimaQ = q;
   estado.ventana.push(puntajes(q));
   if (estado.ventana.length > VENTANA) estado.ventana.shift();
-  if (!estado.fijada) alEstado?.(performance.now() - estado.desde > AVISO_DIFICIL_MS ? "dificil" : "leyendo");
-  // lectura de texto: con la foto a resolucion completa (las letras se ven mejor), sin frenar el bucle
+  if (!estado.fijada) alEstado?.(estado.reflejos >= 2 ? "reflejo" : performance.now() - estado.desde > AVISO_DIFICIL_MS ? "dificil" : "leyendo");
+  lecturaDeTexto(g, W, c);
+}
+
+// lectura de texto: con la foto a resolucion completa (las letras se ven mejor), sin frenar el bucle
+function lecturaDeTexto(g, W, c) {
   if (!estado.leyendo && lector) {
     const Wa = Math.min(1100, Math.round(g.gw)), Ha = Math.round(Wa * g.gh / g.gw);
     lienzoAlto.width = Wa; lienzoAlto.height = Ha;
@@ -683,8 +796,47 @@ async function cuadro(guia) {
   }
 }
 
+// Miniatura en grises 24x34 de la carta enderezada, para saber si se movio entre cuadros.
+function miniatura(carta) {
+  const m = new Uint8Array(24 * 34), d = carta.data;
+  for (let y = 0; y < 34; y++) for (let x = 0; x < 24; x++) {
+    const i = ((Math.floor((y + 0.5) * CH / 34)) * CW + Math.floor((x + 0.5) * CW / 24)) * 4;
+    m[y * 24 + x] = (d[i] * 77 + d[i + 1] * 150 + d[i + 2] * 29) >> 8;
+  }
+  return m;
+}
+function diferencia(a, b) { let s = 0; for (let i = 0; i < a.length; i++) s += Math.abs(a[i] - b[i]); return s / a.length; }
+
+// Reflejo en el nombre: si la camara deja, baja un poco la exposicion (una vez por carta, hasta 2 pasos).
+let pasosLuz = 0, ultimoAjuste = 0;
+function menosLuz() {
+  const pista = flujo?.getVideoTracks?.()[0];
+  if (!pista?.getCapabilities || pasosLuz >= 2 || performance.now() - ultimoAjuste < 1500) return;
+  const cap = pista.getCapabilities(), ec = cap.exposureCompensation;
+  if (!ec || !(ec.max > ec.min)) return;
+  const actual = pista.getSettings().exposureCompensation ?? 0, paso = Math.max(ec.step || 0, (ec.max - ec.min) / 8);
+  const nuevo = Math.max(ec.min, actual - paso);
+  if (nuevo >= actual) return;
+  pasosLuz++; ultimoAjuste = performance.now();
+  pista.applyConstraints({ advanced: [{ exposureCompensation: nuevo }] }).then(() => anotar("exposicion", nuevo)).catch(() => {});
+}
+function luzNormal() {
+  const pista = flujo?.getVideoTracks?.()[0];
+  if (!pasosLuz || !pista?.applyConstraints) return;
+  pasosLuz = 0;
+  pista.applyConstraints({ advanced: [{ exposureCompensation: 0 }] }).catch(() => {});
+}
+
+// Con una hoja abierta encima (lote, terminar) la camara sigue prendida pero no lee: al volver empieza de cero.
+let pausado = false;
+export function pausar(si) {
+  if (pausado && !si) { estado = nuevoEstado(); }
+  pausado = !!si;
+}
+
 async function bucle(guia) {
   while (corriendo) {
+    if (pausado) { await new Promise((ok) => setTimeout(ok, 200)); continue; }
     const t0 = performance.now();
     try { await cuadro(guia); } catch (e) { console.error(e); }
     const espera = Math.max(0, 90 - (performance.now() - t0));
@@ -693,7 +845,7 @@ async function bucle(guia) {
 }
 
 export async function abrirCamara(elVideo, guia, { resultado, estado: alCambiarEstado }) {
-  video = elVideo; alResultado = resultado; alEstado = alCambiarEstado; estado = nuevoEstado();
+  video = elVideo; alResultado = resultado; alEstado = alCambiarEstado; estado = nuevoEstado(); pausado = false; pasosLuz = 0;
   flujo = await navigator.mediaDevices.getUserMedia({
     audio: false,
     video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },

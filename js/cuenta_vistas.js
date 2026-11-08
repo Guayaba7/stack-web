@@ -2,7 +2,7 @@
 // Los inventarios se valuan con los precios del dia. La app escribe todo; la pagina tambien puede añadir cartas a un inventario.
 import * as cuenta from "./cuenta.js";
 import { aplicarTema, temaGuardado } from "./temas.js";
-import { datos, aPesos, filaDe, precioFila } from "./datos.js";
+import { datos, aPesos, filaDe, precioFila, cargarUniverso } from "./datos.js";
 import { fuentePreferida, NOMBRE_FUENTE } from "./ajustes.js";
 import { normalizar } from "./buscar.js";
 import { t, pesos, fecha, idiomaActual } from "./i18n.js";
@@ -223,6 +223,13 @@ function requiereSesion(app) {
   return true;
 }
 
+// las cartas de menos de $2 tienen su precio en u/xx.json: se bajan antes de valuar (solo las que hagan falta)
+function asegurarPrecios(piezas) {
+  const faltan = new Set();
+  for (const p of piezas || []) if (!filaDe(`${p.sid}:${LETRA[p.acab] || "n"}`) && p.nombre) faltan.add(p.nombre);
+  return faltan.size ? cargarUniverso([...faltan]) : Promise.resolve();
+}
+
 function valuar(piezas) {
   const P = precios();
   let valor = 0, costo = 0, sinPrecio = 0, cartas = 0;
@@ -246,7 +253,7 @@ export async function vistaInventarios(app) {
   if (requiereSesion(app)) return;
   app.innerHTML = `<h1 class="titulo-vista">${esc(t("inv.titulo"))}</h1><div class="cargando"></div>`;
   let invs;
-  try { invs = await inventarios(); } catch (e) { app.innerHTML = `<div class="vacio">${esc(mensaje(e))}</div>`; return; }
+  try { invs = await inventarios(); await asegurarPrecios(invs.flatMap((i) => i.piezas || [])); } catch (e) { app.innerHTML = `<div class="vacio">${esc(mensaje(e))}</div>`; return; }
   if (!location.hash.startsWith("#/inv")) return;
   const abrirStack = `<a class="boton-vacio abrir-stack" href="#/stack">${esc(t("stack.abrir"))}</a>`;
   if (!invs.length) { app.innerHTML = `<h1 class="titulo-vista">${esc(t("inv.titulo"))}</h1><div class="vacio"><div class="grande">${esc(t("inv.vacio"))}</div>${esc(t("inv.vacio_ayuda"))}</div>${abrirStack}`; return; }
@@ -268,7 +275,7 @@ export async function vistaInventario(app, id) {
   if (requiereSesion(app)) return;
   app.innerHTML = `<a class="volver" href="#/inv">${esc(t("ficha.atras"))}</a><div class="cargando"></div>`;
   let inv;
-  try { inv = await cuenta.leer(`inv:${id}`); } catch (e) { app.innerHTML = `<div class="vacio">${esc(mensaje(e))}</div>`; return; }
+  try { inv = await cuenta.leer(`inv:${id}`); if (inv) await asegurarPrecios(inv.piezas); } catch (e) { app.innerHTML = `<div class="vacio">${esc(mensaje(e))}</div>`; return; }
   if (!inv) { app.innerHTML = `<a class="volver" href="#/inv">${esc(t("ficha.atras"))}</a><div class="vacio">${esc(t("inv.no_existe"))}</div>`; return; }
   const filas = (inv.piezas || []).map((p) => {
     const n = Number(p.cantidad) || 0, unit = precioFila(filaDe(`${p.sid}:${LETRA[p.acab] || "n"}`), fuentePreferida()).mxn;
@@ -386,7 +393,13 @@ export async function montarAgregar(f) {
   });
 }
 
-async function agregarPieza(tipo, f, acab, q, costo) {
+function agregarPieza(tipo, f, acab, q, costo) {
+  return agregarVarias(tipo, [{ sid: f.sid, acab, nombre: f.nombre, set: f.set, numero: f.num, cantidad: q, costo }]);
+}
+
+// Suma varias cartas a un inventario de la cuenta en un solo guardado (lo usa tambien el escaner al TERMINAR).
+// lineas: [{sid, acab: nonfoil|foil|etched, nombre, set, numero, cantidad, costo?}]. Devuelve el nombre del inventario.
+export async function agregarVarias(tipo, lineas) {
   for (let intento = 0; intento < 4; intento++) {
     const lista = await cuenta.listar();
     let destino = tipo, actual = null;
@@ -408,17 +421,21 @@ async function agregarPieza(tipo, f, acab, q, costo) {
     }
     cuenta.fijarVersion(destino, info ? info.version : 0);
     const piezas = actual.piezas || (actual.piezas = []);
-    const p = piezas.find((x) => x.sid === f.sid && (x.acab || "nonfoil") === acab);
-    if (p) {
-      const antes = Number(p.cantidad) || 0;
-      if (costo != null) p.costo_prom = p.costo_prom == null ? costo : Math.round(((p.costo_prom * antes) + costo * q) / (antes + q) * 100) / 100;
-      p.cantidad = antes + q;
-      p.agregada = new Date().toISOString().slice(0, 19) + "+00:00";
-    } else {
-      piezas.push({ sid: f.sid, acab, nombre: f.nombre, set: f.set, numero: f.num, cantidad: q, costo_prom: costo,
-        agregada: new Date().toISOString().slice(0, 19) + "+00:00" });
+    const ahora = new Date().toISOString().slice(0, 19) + "+00:00";
+    for (const l of lineas) {
+      const q = Number(l.cantidad) || 0, costo = l.costo ?? null;
+      if (q <= 0) continue;
+      const p = piezas.find((x) => x.sid === l.sid && (x.acab || "nonfoil") === l.acab);
+      if (p) {
+        const antes = Number(p.cantidad) || 0;
+        if (costo != null) p.costo_prom = p.costo_prom == null ? costo : Math.round(((p.costo_prom * antes) + costo * q) / (antes + q) * 100) / 100;
+        p.cantidad = antes + q;
+        p.agregada = ahora;
+      } else {
+        piezas.push({ sid: l.sid, acab: l.acab, nombre: l.nombre, set: l.set, numero: l.numero, cantidad: q, costo_prom: costo, agregada: ahora });
+      }
     }
-    actual.actualizado = new Date().toISOString().slice(0, 19) + "+00:00";
+    actual.actualizado = ahora;
     try {
       await cuenta.guardar(destino, actual);
       return actual.nombre;
@@ -428,6 +445,14 @@ async function agregarPieza(tipo, f, acab, q, costo) {
   }
   throw new Error("error");
 }
+
+// Para el escaner: inventarios de la cuenta (o [] sin sesion) y el texto de un error de cuenta.
+export async function inventariosCuenta() { return cuenta.sesion() ? inventarios() : []; }
+export const mensajeCuenta = (e) => mensaje(e);
+export const sesionActiva = () => !!cuenta.sesion();
+export const crearCodigo = (doc) => cuenta.crearCompartido(doc);
+const ERR_CODIGO = { sin_red: "stack.err.sin_red", documento_grande: "lote.err.grande", demasiados_codigos: "lote.err.demasiados", sin_servidor: "cuenta.err.sin_servidor" };
+export const mensajeCodigo = (e) => t(ERR_CODIGO[e?.message] || "lote.err.codigo");
 
 // ---------------------------------------------------------------- abrir un archivo .stack (inventario o bundle de la app)
 // Se abre aqui mismo, sin subirlo a ningun lado: se lee en el navegador. Sin cuenta se ve con imagenes y precio de hoy;
@@ -459,6 +484,7 @@ export function vistaStack(app, codigoRuta = "") {
       const r = await cuenta.abrirCompartido(codigo);
       stackAbierto = await docDeGzip(r.gz); stackAbierto.archivo = r.codigo; stackAbierto.codigo = r.codigo; stackAbierto.expira = r.expira;
       if (location.hash !== `#/s/${r.codigo}`) history.replaceState(null, "", `#/s/${r.codigo}`);
+      await asegurarPrecios(stackAbierto.piezas);
       pintarVista();
     } catch (e) { errEn.className = "error"; errEn.textContent = errorDe(e, "stack.err"); }
   };
@@ -475,7 +501,7 @@ export function vistaStack(app, codigoRuta = "") {
     const zona = app.querySelector("#soltar"), inp = app.querySelector("#archivo-stack");
     const abrir = async (f) => {
       if (!f) return;
-      try { stackAbierto = await leerStack(f); stackAbierto.archivo = f.name; pintarVista(); }
+      try { stackAbierto = await leerStack(f); stackAbierto.archivo = f.name; await asegurarPrecios(stackAbierto.piezas); pintarVista(); }
       catch (e) { pintarElegir(errorDe(e, "stack.err")); }
     };
     inp.addEventListener("change", () => abrir(inp.files[0]));

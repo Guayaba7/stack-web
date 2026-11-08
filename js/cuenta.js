@@ -204,6 +204,36 @@ export async function guardar(tipo, obj) {
 // ---------------------------------------------------------------- inventarios compartidos con codigo (app 0.7.5+)
 // Mismo protocolo que la app: PBKDF2-SHA256(codigo, "stack-compartir-v1", 100000) -> 48 bytes: id (16, hex) | llave AES (32).
 // El servidor solo guarda el bloque cifrado bajo el id; sin el codigo no se puede leer. Devuelve el gzip descifrado.
+async function llavesCompartir(c) {
+  const base = await sutil.importKey("raw", te.encode(c), "PBKDF2", false, ["deriveBits"]);
+  return new Uint8Array(await sutil.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: te.encode("stack-compartir-v1"), iterations: 100000 }, base, 384));
+}
+
+// Sube cifrado un documento con el formato de un .stack (lo usa el escaner al TERMINAR). No hace falta cuenta.
+export async function crearCompartido(doc) {
+  if (!CUENTAS_URL) throw new Error("sin_servidor");
+  const crudo = await comprimir(JSON.stringify(doc));
+  const borrar = b64(azar(24));
+  for (let intento = 0; intento < 4; intento++) {
+    const c = [...azar(10)].map((x) => ALFABETO[x & 31]).join("");
+    const bits = await llavesCompartir(c);
+    const llave = await sutil.importKey("raw", bits.slice(16), "AES-GCM", false, ["encrypt"]);
+    const iv = azar(12);
+    const cif = new Uint8Array(await sutil.encrypt({ name: "AES-GCM", iv, additionalData: te.encode("stack-compartir-v1") }, llave, crudo));
+    const todo = new Uint8Array(12 + cif.length); todo.set(iv); todo.set(cif, 12);
+    let r, j;
+    try {
+      r = await fetch(CUENTAS_URL.replace(/\/$/, "") + "/compartir", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: hex(bits.slice(0, 16)), datos: b64(todo), dias: 30, borrar }) });
+      j = await r.json();
+    } catch { throw new Error("sin_red"); }
+    if (r.status === 409) continue;                                  // id ocupado: otro codigo
+    if (!j.ok) throw new Error(j.error || "error");
+    return { codigo: `${c.slice(0, 5)}-${c.slice(5)}`, expira: j.expira };
+  }
+  throw new Error("error");
+}
+
 export async function abrirCompartido(codigo) {
   const c = normalizarCodigo(codigo);
   if (c.length !== 10) throw new Error("codigo_invalido");
