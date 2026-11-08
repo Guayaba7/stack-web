@@ -42,3 +42,20 @@ export function textoOracle(c) {
   if (c.oracle_text) return c.oracle_text;
   return (c.card_faces || []).map((f) => f.oracle_text || "").join("\n");
 }
+
+// Simbolo de cada set (para las ediciones del escaner). La lista de sets cambia poco: se guarda una semana en este navegador.
+let sets = null;
+export function simbolosSets() {
+  if (sets) return sets;
+  const LLAVE = "stack.sets", SEMANA = 7 * 864e5;
+  try {
+    const g = JSON.parse(localStorage.getItem(LLAVE) || "null");
+    if (g && Date.now() - g.t < SEMANA && Array.isArray(g.s)) { sets = Promise.resolve(new Map(g.s.map(([c, i, n]) => [c, { icono: i, nombre: n }]))); return sets; }
+  } catch { /* sin almacenamiento */ }
+  sets = pedir(`${API}/sets`).then((d) => {
+    const s = (d.data || []).map((x) => [x.code, x.icon_svg_uri || "", x.name || ""]);
+    try { localStorage.setItem(LLAVE, JSON.stringify({ t: Date.now(), s })); } catch { /* lleno o bloqueado */ }
+    return new Map(s.map(([c, i, n]) => [c, { icono: i, nombre: n }]));
+  }).catch((e) => { sets = null; throw e; });
+  return sets;
+}

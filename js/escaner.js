@@ -224,7 +224,8 @@ function suavizar({ g, w, h }) {
   return { g: b, w, h };
 }
 function bordes({ g, w, h }, lado, hondo = 0.42, nlin = 40) {
-  const pts = [];
+  const pts = [], dentro = [];
+  pts.dentro = dentro;
   const vertical = lado === "izq" || lado === "der";
   const largo = vertical ? h : w, ancho = vertical ? w : h, lim = Math.floor(hondo * ancho);
   for (let k = 0; k < nlin; k++) {
@@ -240,8 +241,14 @@ function bordes({ g, w, h }, lado, hondo = 0.42, nlin = 40) {
     if (max < 12) continue;
     const umbral = Math.max(12, 0.45 * max);
     let i = 0; while (d[i] < umbral) i++;
-    const pos = (lado === "izq" || lado === "arr") ? i + 0.5 : (ancho - 1) - i - 0.5;
-    pts.push([t, pos]);
+    const pos = (q) => (lado === "izq" || lado === "arr") ? q + 0.5 : (ancho - 1) - q - 0.5;
+    pts.push([t, pos(i)]);
+    // segunda orilla: si la carta esta en una mica, el borde de la carta queda 1-9% mas adentro que el de la mica
+    let j = i + 2; while (j < lim && d[j] >= umbral * 0.6) j++;           // salir de la primera orilla
+    const fin = Math.min(lim, i + Math.ceil(0.09 * ancho));
+    let m2 = 0, q2 = -1;
+    for (let q = j + 1; q < fin; q++) if (d[q] > m2) { m2 = d[q]; q2 = q; }
+    if (q2 > 0 && m2 >= Math.max(10, 0.3 * max)) dentro.push([t, pos(q2)]);
   }
   return pts;
 }
@@ -261,23 +268,46 @@ function ajustarRecta(pts) {
   return { a, b, frac: ok.filter(Boolean).length / pts.length };
 }
 function esquinas(img, W, H) {
-  const g = suavizar(grisChico(img, W, H)), esc = W / g.w, r = {};
+  const g = suavizar(grisChico(img, W, H)), esc = W / g.w, r = {}, ri = {};
   for (const lado of ["izq", "der", "arr", "aba"]) {
     const p = bordes(g, lado);
     if (p.length < 10) return null;
     const f = ajustarRecta(p);
     if (!f || f.frac < 0.5) return null;
     r[lado] = f;
+    const fi = p.dentro.length >= 10 ? ajustarRecta(p.dentro) : null;
+    if (fi && fi.frac >= 0.5) ri[lado] = fi;
   }
-  const cruce = (v, hz) => { const y = (hz.a * v.b + hz.b) / (1 - v.a * hz.a); return [(v.a * y + v.b) * esc, y * esc]; };
-  const c = [cruce(r.izq, r.arr), cruce(r.der, r.arr), cruce(r.der, r.aba), cruce(r.izq, r.aba)];
+  const c = cuadro4(r, esc);
+  if (!c) return null;
   const dist = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]);
   const ancho = (dist(c[0], c[1]) + dist(c[3], c[2])) / 2, alto = (dist(c[0], c[3]) + dist(c[1], c[2])) / 2;
   if (!(alto > 0) || ancho / alto < 0.55 || ancho / alto > 0.9 || ancho * alto < 0.3 * W * H) return null;
+  // Carta en mica: otra orilla paralela 1-9% mas adentro en los lados y arriba. No se sabe si es la carta o el borde
+  // negro de una carta sin mica, asi que se guarda como segunda opcion y el lector de texto prueba las dos.
+  if (ri.izq && ri.der && ri.arr) {
+    if (!ri.aba) ri.aba = r.aba;
+    const ci = cuadro4(ri, esc);
+    if (ci) {
+      const dentro = (k) => Math.abs(ci[k][0] - c[k][0]) / ancho, abajo = (k) => Math.abs(ci[k][1] - c[k][1]) / alto;
+      const ok = [0, 1].every((k) => dentro(k) > 0.01 && dentro(k) < 0.1 && abajo(k) > 0.008 && abajo(k) < 0.08);
+      if (ok) c.interior = ci;
+    }
+  }
+  return c;
+}
+
+// 4 rectas (izq, der, arr, aba; en la imagen chica) -> 4 esquinas en la imagen de trabajo.
+function cuadro4(r, esc) {
+  const cruce = (v, hz) => { const y = (hz.a * v.b + hz.b) / (1 - v.a * hz.a); return [(v.a * y + v.b) * esc, y * esc]; };
+  const c = [cruce(r.izq, r.arr), cruce(r.der, r.arr), cruce(r.der, r.aba), cruce(r.izq, r.aba)];
+  if (c.some(([x, y]) => !isFinite(x) || !isFinite(y))) return null;
+  const dist = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]);
+  const ancho = (dist(c[0], c[1]) + dist(c[3], c[2])) / 2, alto = (dist(c[0], c[3]) + dist(c[1], c[2])) / 2;
   // Con borde negro sobre mesa oscura, la orilla de abajo suele confundirse con el final de la caja de texto.
   // Arriba y los lados salen bien (ahi se lee el nombre): si la proporcion no es la de una carta (63x88 mm),
   // la orilla de abajo se reconstruye con el ancho de arriba siguiendo la direccion de los lados.
-  if (Math.abs(ancho / alto - 63 / 88) > 0.025) {
+  if (alto > 0 && Math.abs(ancho / alto - 63 / 88) > 0.025) {
     const arriba = dist(c[0], c[1]), largo = arriba * 88 / 63;
     const dir = (p, q) => { const L = dist(p, q) || 1; return [(q[0] - p[0]) / L, (q[1] - p[1]) / L]; };
     const dI = dir(c[0], c[3]), dD = dir(c[1], c[2]);
@@ -550,9 +580,10 @@ function publicar(ed) {
 
 // ---------------------------------------------------------------- lecturas de texto (en segundo plano)
 async function leerCodigo(foto) {
-  const { img, W, H, c } = foto;
+  const { img, W, H, c } = foto, dy = foto.dy || 0;
   let texto = "";
-  for (const r of CODIGO) {
+  for (const r0 of CODIGO) {
+    const r = { ...r0, y0: r0.y0 - dy, y1: r0.y1 - dy };              // en mica la linea de abajo queda mas arriba
     const ancho = Math.round(OCR.alto * ((r.x1 - r.x0) * CW) / ((r.y1 - r.y0) * CH));
     const l = await leerLinea(muestrear(img, W, H, c, r, ancho, OCR.alto, true));
     if (l.confianza >= 0.4) texto += " " + l.texto;
@@ -578,8 +609,8 @@ function edicionPorCodigo(texto, sids) {
 }
 
 async function leerNombre(foto, otro = null) {
-  const { img, W, H, c } = foto;
-  const r = BANDA_NOMBRE, ancho = Math.round(OCR.alto * ((r.x1 - r.x0) * CW) / ((r.y1 - r.y0) * CH));
+  const { img, W, H, c } = foto, dy = foto.dy || 0;
+  const r = { ...BANDA_NOMBRE, y0: BANDA_NOMBRE.y0 + dy, y1: BANDA_NOMBRE.y1 + dy }, ancho = Math.round(OCR.alto * ((r.x1 - r.x0) * CW) / ((r.y1 - r.y0) * CH));
   // Con reflejo o luz dispareja se lee la barra "aplanada"; si una lectura limpia falla, la siguiente tambien prueba aplanada.
   const plano = PLANO === "siempre" || (PLANO !== "nunca" && (estado.reflejos > 0 || estado.fallidas % 2 === 1));
   const band = muestrear(img, W, H, c, r, ancho, OCR.alto, plano);
@@ -646,12 +677,62 @@ async function porReglas(foto) {
   return g0;
 }
 
+// Con mica hay dos cartas posibles: la orilla de la mica y la de la carta (un poco mas adentro). Se lee primero con la que
+// funciono la ultima vez (casi siempre todas las cartas de un lote estan en mica, o ninguna) y, si no sale, con la otra.
+let margenMica = null;                                   // margen: donde queda la carta dentro de la mica (fraccion del cuadro)
+// Con mica hay dos cartas posibles: la orilla de la mica y la de la carta (un poco mas adentro). Se lee primero con la que
+// funciono la ultima vez (casi siempre todas las cartas de un lote estan en mica, o ninguna) y, si no sale, con la otra.
+let conMica = false;
+const fotoCon = (foto) => {
+  const ci = foto.ci || (margenMica && conMargen(foto.c));
+  return ci && (estado.quad === "ci" || (!estado.quad && conMica)) ? { ...foto, c: ci } : foto;
+};
+// la carta de dentro expresada en coordenadas del cuadro de la mica (0-1), para usarla cuando la orilla interior no se ve
+function margenDe(c, ci) {
+  const inv = homografiaInversa(c);
+  return ci.map(([x, y]) => { const [u, v] = aplicar(inv, x, y); return [u / CW, v / CH]; });
+}
+function aplicar(m, x, y) { const z = m[6] * x + m[7] * y + m[8]; return [(m[0] * x + m[1] * y + m[2]) / z, (m[3] * x + m[4] * y + m[5]) / z]; }
+function homografiaInversa(c) {
+  const h = homografia(c);
+  const [a, b, cc, d, e, f, g, hh, i] = h;
+  const A = e * i - f * hh, B = -(d * i - f * g), C = d * hh - e * g;
+  const det = a * A + b * B + cc * C;
+  return [A / det, -(b * i - cc * hh) / det, (b * f - cc * e) / det, B / det, (a * i - cc * g) / det, -(a * f - cc * d) / det, C / det, -(a * hh - b * g) / det, (a * e - b * d) / det];
+}
+function conMargen(c) {
+  if (!margenMica) return null;
+  const m = homografia(c);
+  return margenMica.map(([u, v]) => aplicar(m, u * CW, v * CH));
+}
+
+async function nombreConMica(foto, otro) {
+  const ja = !!otro;
+  if (!foto.ci && conMica && margenMica) { const ci = conMargen(foto.c); ci.sintetica = true; foto = { ...foto, ci }; }
+  const quads = foto.ci ? (conMica ? [foto.ci, foto.c] : [foto.c, foto.ci]) : [foto.c];
+  let mejor = null;
+  for (const q of quads) {
+    const r = emparejarNombre(await leerNombre({ ...foto, c: q }, otro), ja);
+    if (!corriendo) return null;
+    if (r && (!mejor || r.s > mejor.r.s)) mejor = { r, q };
+    if (r && r.s >= NOMBRE_DOBLE) break;
+  }
+  if (!mejor) return null;
+  if (foto.ci) {
+    const mica = mejor.q === foto.ci;
+    estado.quad = mica ? "ci" : "c";
+    if (mica && !foto.ci.sintetica) margenMica = margenDe(foto.c, foto.ci);
+    if (mejor.r.s >= NOMBRE_SEGURO && mica !== conMica) { conMica = mica; anotar("mica", mica); }
+  }
+  return mejor.r;
+}
+
 async function leer(foto) {
   const est = estado;                                             // si sueltan la carta mientras leemos, se descarta
   est.leyendo = true;
   try {
     if (estado.fallidas >= LECTURAS_ANTES_DE_TEXTO && !estado.fijada) {
-      const g = await porReglas(foto);
+      const g = await porReglas(fotoCon(foto));
       if (!corriendo || est !== estado) return;
       if (g != null) { await fijar(g, "reglas"); return; }
       // ultimo recurso (texto ilegible): solo imagen y con margen muy alto
@@ -668,24 +749,28 @@ async function leer(foto) {
     }
     // ya hay carta y tiene varias ediciones: leer el codigo de coleccion (hasta 4 intentos) para elegir la exacta
     const f0 = estado.fijada;
-    if (f0 && !f0.porCodigo && (f0.intentosCodigo ?? 0) < (f0.dudosa ? 10 : 4)) {
+    if (f0) {
       const ed = elegirEdicion(f0.grupo);
-      if (ed.todas.length > 1) {
+      const varias = ed && ed.todas.length > 1 && !f0.porCodigo && (f0.intentosCodigo ?? 0) < (f0.dudosa ? 10 : 4);
+      if (varias) {
         f0.intentosCodigo = (f0.intentosCodigo ?? 0) + 1;
-        const sid = edicionPorCodigo(await leerCodigo(foto), ed.todas);
+        const texto = await leerCodigo(fotoCon(foto));
         if (!corriendo || est !== estado) return;
+        const sid = edicionPorCodigo(texto, ed.todas);
+        let cambio = false;
         if (sid) {
           f0.porCodigo = true;
           anotar("edicion-por-codigo", sid);
-          if (sid !== f0.sid || f0.dudosa) { f0.sid = sid; f0.dudosa = false; publicar({ ...ed, sid, dudosa: false, todas: [sid, ...ed.todas.filter((x) => x !== sid)] }); }
+          if (sid !== f0.sid || f0.dudosa) { f0.sid = sid; f0.dudosa = false; cambio = true; }
         }
+        if (cambio) publicar({ ...ed, sid: f0.sid, dudosa: !!f0.dudosa, todas: [f0.sid, ...ed.todas.filter((x) => x !== f0.sid)] });
         if (f0.intentosCodigo % 2 === 1) return;                 // alterna: codigo, nombre, codigo, nombre...
       }
     }
-    let r = emparejarNombre(await leerNombre(foto));
+    let r = await nombreConMica(foto, null);
     if (!corriendo || est !== estado) return;
     if (!r && lectorJa) {                                          // no se leyo en letras latinas: probar en japones
-      r = emparejarNombre(await leerNombre(foto, lectorJa), true);
+      r = await nombreConMica(foto, lectorJa);
       if (!corriendo || est !== estado) return;
     }
     const fallo = () => { estado.fallidas++; };
@@ -714,7 +799,11 @@ async function leer(foto) {
     const v = estado.votos.get(r.grupo) || { n: 0, mejor: 0 };
     v.n++; v.mejor = Math.max(v.mejor, r.s); estado.votos.set(r.grupo, v);
     const claro = r.s - r.segundo >= 0.08;
+    // nombre medio leido (mica, japones) que coincide con lo que dice la imagen: dos pistas independientes que apuntan a lo mismo
+    const p = promedio(), vis = p ? visualDeGrupo(p, r.grupo) : -1;
+    const acuerdo = claro && r.s >= 0.6 && vis >= VISUAL_FUERTE - 0.03 && p && indice.grupoDeSid.get(indice.ids[mejores(p, 1)[0][0]]) === r.grupo;
     if ((r.s >= NOMBRE_SEGURO && claro) || (v.n >= 2 && v.mejor >= NOMBRE_DOBLE)) await fijar(r.grupo, "nombre");
+    else if (acuerdo) await fijar(r.grupo, "nombre+imagen");
     else if (r.s < NOMBRE_DOBLE) fallo();
   } catch (e) {
     console.error(e);
@@ -760,7 +849,7 @@ async function cuadro(guia) {
     return;
   }
   estado.sinCarta = 0;
-  const carta = enderezar(img, W, H, c);
+  const carta = enderezar(img, W, H, conMica ? (c.interior || conMargen(c) || c) : c);
   // Carta fija y quieta: no hace falta otra huella (ahorra el paso mas caro de cada cuadro); el texto se sigue leyendo.
   const mini = miniatura(carta), quieta = estado.mini && diferencia(mini, estado.mini) < QUIETA;
   estado.mini = mini;
@@ -792,7 +881,8 @@ function lecturaDeTexto(g, W, c) {
     lienzoAlto.width = Wa; lienzoAlto.height = Ha;
     ctxAlto.drawImage(video, g.gx, g.gy, g.gw, g.gh, 0, 0, Wa, Ha);
     const k = Wa / W;
-    leer({ img: ctxAlto.getImageData(0, 0, Wa, Ha).data, W: Wa, H: Ha, c: c.map(([x, y]) => [x * k, y * k]) });
+    const escalar = (q) => q.map(([x, y]) => [x * k, y * k]);
+    leer({ img: ctxAlto.getImageData(0, 0, Wa, Ha).data, W: Wa, H: Ha, c: escalar(c), ci: c.interior ? escalar(c.interior) : null });
   }
 }
 

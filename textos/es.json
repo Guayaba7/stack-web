@@ -308,5 +308,7 @@
   "lote.err.demasiados": "Se crearon demasiados códigos hoy desde esta red. Intenta mañana.",
   "lote.err.codigo": "No se pudo crear el código. Intenta otra vez.",
   "lote.una_carta": "1 carta",
-  "lote.anadir_1": "Añadir 1 carta"
+  "lote.anadir_1": "Añadir 1 carta",
+  "escaner.promo": "PROMO",
+  "escaner.promo_fecha": "PROMO {anio}"
 }

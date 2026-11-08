@@ -296,6 +296,23 @@ body.en-escaner { overflow: hidden; }
 .res-lote span { flex: 1; }
 .res-lote .chip-acab { min-width: 44px; font-size: 18px; }
 .aviso-ed { color: var(--ambar); font-weight: 600; }
+.res-otras-tit { margin-top: 10px; font-size: 13px; }
+.ed-rejilla { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 6px; }
+.ed-cel {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 2px 6px; min-height: 48px; padding: 4px 6px;
+  border: 1px solid var(--linea); border-radius: 8px; background: transparent; color: var(--texto); cursor: pointer; font: inherit; font-size: 13px;
+}
+.ed-cel:hover, .ed-cel:focus-visible { border-color: var(--verde); outline: none; }
+.ed-mas { font-weight: 700; }
+.ed-set { font-weight: 700; letter-spacing: .02em; }
+.ed-set.con-icono i { width: 22px; height: 22px; display: block; background: var(--texto);
+  -webkit-mask: var(--ico) center / contain no-repeat; mask: var(--ico) center / contain no-repeat; }
+.res-fila .ed-set.con-icono { display: inline-block; vertical-align: -5px; }
+.res-fila .ed-set.con-icono i { width: 18px; height: 18px; }
+.ed-promo.hay { flex-basis: 100%; text-align: center; font-size: 10px; font-weight: 800; letter-spacing: .08em; color: var(--ambar);
+  border: 1px solid var(--ambar); border-radius: 4px; padding: 0 4px; }
+.res-fila .ed-promo.hay { display: inline-block; margin-left: 6px; flex-basis: auto; }
+.ed-u { font-size: 10px; color: var(--tenue); }
 .esc-lote {
   position: absolute; left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom)); display: flex; gap: 8px;
   background: var(--panel); border: 1px solid var(--linea); border-radius: 14px; padding: 8px;

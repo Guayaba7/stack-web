@@ -308,5 +308,7 @@
   "lote.err.demasiados": "Too many codes were created from this network today. Try again tomorrow.",
   "lote.err.codigo": "The code could not be created. Try again.",
   "lote.una_carta": "1 card",
-  "lote.anadir_1": "Add 1 card"
+  "lote.anadir_1": "Add 1 card",
+  "escaner.promo": "PROMO",
+  "escaner.promo_fecha": "PROMO {anio}"
 }

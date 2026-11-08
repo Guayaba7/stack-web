@@ -507,11 +507,12 @@ async function pintarResultado(panel, res, elegido = null) {
   // otras ediciones: pocas a la vista para no tapar la camara (todas si la edicion es dudosa o se pidio "mas")
   const visibles = res.dudosa || res.todasOtras ? res.otras : res.otras.slice(0, 5);
   const otras = res.otras.flat().length
-    ? `<div class="res-otras">${res.dudosa ? `<span class="aviso-ed">${esc(t("escaner.dudosa"))}</span>` : `<span class="tenue">${esc(t("escaner.otras"))}</span>`} ${visibles.map((fs) => `<button type="button" class="chip-acab" data-otra="${esc(fs[0][0])}">${esc(fs[0][1].toUpperCase())} #${esc(fs[0][2])}${fs[0].u ? " · &lt;$2" : ""}</button>`).join("")}${visibles.length < res.otras.length ? `<button type="button" class="chip-acab" data-mas-ed>+${res.otras.length - visibles.length}</button>` : ""}</div>`
+    ? `<div class="res-otras-tit">${res.dudosa ? `<span class="aviso-ed">${esc(t("escaner.dudosa"))}</span>` : `<span class="tenue">${esc(t("escaner.otras"))}</span>`}</div>
+      <div class="ed-rejilla">${visibles.map((fs) => celdaEdicion(fs[0])).join("")}${visibles.length < res.otras.length ? `<button type="button" class="ed-cel ed-mas" data-mas-ed>+${res.otras.length - visibles.length}</button>` : ""}</div>`
     : "";
   panel.innerHTML = `<a class="res-fila" href="#/c/${encodeURIComponent(k)}">
       <img src="${miniatura(k)}" alt="">
-      <div class="medio"><div class="titulo">${esc(nombre)}</div><div class="sub">${esc(set.toUpperCase())} #${esc(num)} · ${esc(t(`acabado.${acab}`))}</div></div>
+      <div class="medio"><div class="titulo">${esc(nombre)}</div><div class="sub">${simboloSet(set)} #${esc(num)} · ${esc(t(`acabado.${acab}`))}<span class="ed-promo" data-promo="${esc(k.split(":")[0])}"></span></div></div>
       <div class="der"><div class="res-precio num">${precioRapido(fila)}</div><div class="tiendas">${NOMBRE_FUENTE[precioFila(fila, fuentePreferida()).fuente]}</div></div></a>
     <div class="res-tiendas num" id="res-tiendas"></div>
     <div class="res-lote">${q
@@ -519,6 +520,7 @@ async function pintarResultado(panel, res, elegido = null) {
       : `<span class="tenue">${esc(t("lote.quitada"))}</span><button type="button" class="chip-acab" data-q="1">${esc(t("lote.volver"))}</button>`}</div>
     <div class="res-acabados">${acabados}</div>${otras}`;
   panel.hidden = false;
+  adornarEdiciones(panel);
   panel.classList.remove("anterior");
   panel.onclick = (e) => {
     const bq = e.target.closest("[data-q]");
@@ -547,6 +549,39 @@ async function pintarResultado(panel, res, elegido = null) {
     if (f.ck?.compra_usd) partes.push(`<span class="sube">${esc(t("escaner.ck_compra", { precio: pesos(aPesos(f.ck.compra_usd)) }))}</span>`);
     caja.innerHTML = partes.join(" · ");
   } catch { /* sin precios de tienda: queda solo TCG */ }
+}
+
+// ---- ediciones del escaner: simbolo del set en vez del codigo, numero, y marca de promo (con su año si lleva fecha)
+const simboloSet = (set) => `<span class="ed-set" data-set="${esc(String(set).toLowerCase())}">${esc(String(set).toUpperCase())}</span>`;
+function celdaEdicion(f) {
+  return `<button type="button" class="ed-cel" data-otra="${esc(f[0])}">${simboloSet(f[1])}<span class="ed-num num">#${esc(f[2])}</span>
+    <span class="ed-promo" data-promo="${esc(f[0].split(":")[0])}"></span>${f.u ? `<span class="ed-u">&lt;$2</span>` : ""}</button>`;
+}
+async function adornarEdiciones(panel) {
+  const setsEl = [...panel.querySelectorAll(".ed-set[data-set]")], promos = [...panel.querySelectorAll(".ed-promo[data-promo]")];
+  scry.simbolosSets().then((mapa) => {
+    for (const el of setsEl) {
+      const s = mapa.get(el.dataset.set);
+      if (!s?.icono || !el.isConnected) continue;
+      // el simbolo de Scryfall es negro: se usa como mascara para pintarlo del color del texto del tema
+      el.innerHTML = `<i role="img" aria-label="${esc(el.dataset.set.toUpperCase())}" title="${esc(s.nombre)} (${esc(el.dataset.set.toUpperCase())})" style="--ico:url('${esc(s.icono)}')"></i>`;
+      el.classList.add("con-icono");
+    }
+  }).catch(() => { /* sin internet a Scryfall: se queda el codigo del set */ });
+  if (!promos.length) return;
+  try {
+    const cartas = await scry.varias([...new Set(promos.map((el) => el.dataset.promo))]);
+    for (const el of promos) {
+      const c = cartas.get(el.dataset.promo);
+      if (!c || !el.isConnected) continue;
+      const tipos = c.promo_types || [];
+      if (!c.promo && !tipos.length) continue;
+      const fecha = tipos.includes("datestamped") || tipos.includes("prerelease");
+      el.textContent = fecha && c.released_at ? t("escaner.promo_fecha", { anio: c.released_at.slice(0, 4) }) : t("escaner.promo");
+      el.title = tipos.join(", ");
+      el.classList.add("hay");
+    }
+  } catch { /* sin datos de Scryfall: sin marca */ }
 }
 
 // ---- hojas del lote: VER (lista con cantidades) y TERMINAR (a un inventario o a un codigo)
