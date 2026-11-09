@@ -62,8 +62,9 @@ export function marcarBoton() {
 
 // En la portada, con sesion abierta: accesos a inventarios y watchlist
 export function accesosPortada() {
-  if (!cuenta.sesion()) return "";
-  return `<div class="accesos"><a href="#/inv">${esc(t("inv.titulo"))}</a><a href="#/watch">${esc(t("watch.titulo"))}</a></div>`;
+  const meta = `<a href="#/meta">META</a><a href="#/decks">${esc(t("dk.titulo"))}</a>`;
+  if (!cuenta.sesion()) return `<div class="accesos">${meta}</div>`;
+  return `<div class="accesos"><a href="#/inv">${esc(t("inv.titulo"))}</a><a href="#/watch">${esc(t("watch.titulo"))}</a>${meta}</div>`;
 }
 
 // ---------------------------------------------------------------- entrar / crear / recuperar
@@ -520,7 +521,7 @@ export function vistaStack(app, codigoRuta = "") {
       return { ...p, n, unit, valor: unit != null ? unit * n : null };
     }).sort((x, y) => (y.valor ?? -1) - (x.valor ?? -1));
     app.innerHTML = `<a class="volver" href="#/stack" id="otro-stack">${esc(t("stack.otro"))}</a>
-      <div class="etiqueta-stack">${esc(t(d.tipo === "bundle" ? "stack.bundle" : "stack.inventario"))}${d.de ? ` · ${esc(t("stack.de", { quien: d.de }))}` : ""}${d.codigo ? ` · ${esc(d.codigo)}` : ""}${d.expira ? ` · ${esc(t("stack.caduca", { fecha: fecha(String(d.expira).slice(0, 10)) }))}` : ""}</div>
+      <div class="etiqueta-stack">${esc(t(d.tipo === "bundle" ? "stack.bundle" : d.tipo === "deck" ? "dk.deck" : "stack.inventario"))}${d.de ? ` · ${esc(t("stack.de", { quien: d.de }))}` : ""}${d.codigo ? ` · ${esc(d.codigo)}` : ""}${d.expira ? ` · ${esc(t("stack.caduca", { fecha: fecha(String(d.expira).slice(0, 10)) }))}` : ""}</div>
       <h1 class="titulo-vista">${esc(d.nombre || d.archivo)}</h1>
       <div class="resumen num">${b && b.precio_mxn != null ? `<div><span class="tenue">${esc(t("stack.precio_bundle"))}</span><b class="ambar">${pesos(b.precio_mxn)}</b></div>` : ""}
         <div><span class="tenue">${esc(t("inv.valor_hoy"))}</span><b>${pesos(v.valor)}</b></div>
@@ -535,6 +536,15 @@ export function vistaStack(app, codigoRuta = "") {
     app.querySelector("#otro-stack").addEventListener("click", (e) => { e.preventDefault(); stackAbierto = null; history.replaceState(null, "", "#/stack"); pintarElegir(); });
     const caja = app.querySelector("#guardar-stack");
     if (!cuenta.disponible()) { caja.remove(); return; }
+    if (d.tipo === "deck" && d.deck) {                     // 0.9.0: un deck compartido va a "mis decks"
+      if (!cuenta.sesion()) { caja.innerHTML = `<h2>${esc(t("dk.recibido"))}</h2><p class="tenue">${esc(t("dk.entra"))}</p><a class="boton-vacio" href="#/cuenta">${esc(t("cuenta.entrar"))}</a>`; return; }
+      caja.innerHTML = `<h2>${esc(t("dk.recibido"))}</h2><button class="primario" type="button" id="deck-guardar">${esc(t("meta.a_mis_decks"))}</button><p class="tenue" id="deck-msg" role="status"></p>`;
+      caja.querySelector("#deck-guardar").addEventListener("click", async () => {
+        try { const { guardarDeckRecibido } = await import("./meta.js"); const id = await guardarDeckRecibido(d.deck); location.hash = `#/decks/${id}`; }
+        catch (ex) { caja.querySelector("#deck-msg").textContent = mensaje(ex); }
+      });
+      return;
+    }
     if (!cuenta.sesion()) { caja.innerHTML = `<h2>${esc(t("stack.guardar_titulo"))}</h2><p class="tenue">${esc(t("stack.entra"))}</p><a class="boton-vacio" href="#/cuenta">${esc(t("cuenta.entrar"))}</a>`; return; }
     caja.innerHTML = `<h2>${esc(t("stack.guardar_titulo"))}</h2><form class="form-cuenta" id="form-stack">
       <label>${esc(t("stack.nombre_nuevo"))}<input name="nombre" maxlength="40" value="${esc(d.nombre || "Recibido")}"></label>

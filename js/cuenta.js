@@ -201,6 +201,11 @@ export async function guardar(tipo, obj) {
   return j.version;
 }
 
+export async function borrarDoc(tipo) {
+  await api(`/docs/${encodeURIComponent(tipo)}`, null, "DELETE");
+  docsCache.delete(tipo);
+}
+
 // ---------------------------------------------------------------- inventarios compartidos con codigo (app 0.7.5+)
 // Mismo protocolo que la app: PBKDF2-SHA256(codigo, "stack-compartir-v1", 100000) -> 48 bytes: id (16, hex) | llave AES (32).
 // El servidor solo guarda el bloque cifrado bajo el id; sin el codigo no se puede leer. Devuelve el gzip descifrado.

@@ -10,6 +10,7 @@ import * as art from "./articulos.js";
 import * as escaner from "./escaner.js";
 import * as scry from "./scryfall.js";
 import * as cv from "./cuenta_vistas.js";
+import * as meta from "./meta.js";
 import { nuevoTog, togActivo, alternarTog, pasaFila, barraToggles } from "./filtros.js";
 
 const app = document.getElementById("app");
@@ -175,6 +176,7 @@ function filaPrecio(nombre, bloque, mxn, original, extra = "", clave = "") {
 }
 
 async function vistaFicha(k) {
+  soltarVista();
   document.body.classList.remove("en-portada");
   app.innerHTML = `<a class="volver" href="#/" data-atras>${esc(t("ficha.atras"))}</a><div class="cargando"></div>`;
   let f = null;
@@ -308,6 +310,8 @@ function leerRuta() {
   if (h.startsWith("/articulos")) return { pantalla: "articulos" };
   if (h.startsWith("/a/")) return { pantalla: "articulo", slug: decodeURIComponent(h.slice(3)) };
   if (h.startsWith("/terminos")) return { pantalla: "terminos" };
+  if (h.startsWith("/meta")) return { pantalla: "meta", fmt: decodeURIComponent(h.split("/")[2] || "") };
+  if (h.startsWith("/decks")) return { pantalla: "decks", id: decodeURIComponent(h.split("/")[2] || "") };
   const q = new URLSearchParams(h.split("?")[1] || "").get("q") || "";
   return { pantalla: "inicio", q };
 }
@@ -324,6 +328,7 @@ function vistaPortadaExtra() {
 const llenarArticulos = () => art.seccionPortada(document.getElementById("art-portada"));
 
 function pintarInicio(q) {
+  soltarVista();
   const portada = esPortada(q);
   document.body.classList.toggle("en-portada", portada);
   app.innerHTML = portada
@@ -400,8 +405,11 @@ app.addEventListener("click", (e) => {
 
 // Al cambiar de pantalla (ficha <-> inicio) se repinta completo.
 // Pantallas de la cuenta (inventarios, watchlist, entrar/crear)
+const soltarVista = () => { app.onclick = app.oninput = app.onchange = null; document.body.classList.remove("ancho"); };   // lo que dejan META / DECKS
 function pantallaCuenta(r) {
+  soltarVista();
   document.body.classList.remove("en-portada");
+  document.body.classList.toggle("ancho", r.pantalla === "meta" || r.pantalla === "decks");
   if (r.pantalla === "cuenta") cv.vistaCuenta(app);
   else if (r.pantalla === "inventarios") cv.vistaInventarios(app);
   else if (r.pantalla === "stack") cv.vistaStack(app, r.codigo || "");
@@ -410,6 +418,8 @@ function pantallaCuenta(r) {
   else if (r.pantalla === "privacidad" || r.pantalla === "terminos") vistaLegal(app, r.pantalla);
   else if (r.pantalla === "articulos") art.vistaArticulos(app);
   else if (r.pantalla === "articulo") art.vistaArticulo(app, r.slug);
+  else if (r.pantalla === "meta") meta.vistaMeta(app, r.fmt);
+  else if (r.pantalla === "decks") meta.vistaDecks(app, r.id);
   else return false;
   return true;
 }
