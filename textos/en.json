@@ -402,5 +402,17 @@
   "meta.creditos": "Data: MTGO, MTGTop8, MTGGoldfish, EDHREC and",
   "meta.vacio": "No data for this format yet.",
   "meta.copiada": "Copied.",
-  "meta.no_copiada": "Could not copy."
+  "meta.no_copiada": "Could not copy.",
+  "dk.quitar": "Remove one",
+  "dk.quitar_todas": "Remove all copies",
+  "dk.buscar_cmd": "Search for your commander…",
+  "dk.buscar_pareja": "Search for its partner (optional)…",
+  "dk.vacio_deck": "Your deck is empty. Search for cards and tap them to add them.",
+  "dk.ir_buscar": "Search cards",
+  "meta.tier1": "Tier 1 · over 5% of the meta",
+  "meta.tier2": "Tier 2 · 2% to 5%",
+  "meta.tier3": "Tier 3 · under 2%",
+  "meta.sin_clasificar": "Unclassified",
+  "meta.top_cmd": "Top 12 most played",
+  "meta.mas_cmd": "More commanders"
 }

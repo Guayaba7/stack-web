@@ -402,5 +402,17 @@
   "meta.creditos": "Datos: MTGO, MTGTop8, MTGGoldfish, EDHREC y",
   "meta.vacio": "Sin datos de este formato todavía.",
   "meta.copiada": "Copiado.",
-  "meta.no_copiada": "No se pudo copiar."
+  "meta.no_copiada": "No se pudo copiar.",
+  "dk.quitar": "Quitar una",
+  "dk.quitar_todas": "Quitar todas las copias",
+  "dk.buscar_cmd": "Busca tu comandante…",
+  "dk.buscar_pareja": "Busca su pareja (opcional)…",
+  "dk.vacio_deck": "Tu deck está vacío. Busca cartas y tócalas para agregarlas.",
+  "dk.ir_buscar": "Buscar cartas",
+  "meta.tier1": "Tier 1 · más del 5% del meta",
+  "meta.tier2": "Tier 2 · del 2% al 5%",
+  "meta.tier3": "Tier 3 · menos del 2%",
+  "meta.sin_clasificar": "Sin clasificar",
+  "meta.top_cmd": "Los 12 más jugados",
+  "meta.mas_cmd": "Más comandantes"
 }

@@ -15,9 +15,9 @@ const miniatura = (sid) => `https://cards.scryfall.io/small/front/${sid[0]}/${si
 const LETRA = { nonfoil: "n", foil: "f", etched: "e", n: "n", f: "f", e: "e" };
 const NOMBRE_TEMA = {
   es: { GRN: "Verde", VLT: "Violeta", GRY: "Grises", RED: "Rojos", RNB: "Arcoíris", NVD: "Navidad", HLW: "Halloween", SNV: "San Valentín",
-    ALG: "Algodón de azúcar", SOL: "Sol", DREAM: "Sueño", PLASMA: "Plasma", GRID: "Grid Shift", CONTOUR: "Contour", GALAXY: "Galaxy", CRT: "CRT", PER: "Personalizado" },
+    ALG: "Algodón de azúcar", SOL: "Sol", DREAM: "Sueño", PLASMA: "Plasma", GRID: "Grid Shift", CONTOUR: "Contour", GALAXY: "Galaxy", CRT: "CRT", FLUJO: "Flujo", CIRCUITO: "Circuito", LAVA: "Lámpara de lava", CONSTELACION: "Constelación", BRASAS: "Brasas", ALBERCA: "Fondo de alberca", LLUVIA: "Lluvia digital", RETRO: "Atardecer retro", MANA: "Ciclo de maná", PERG: "Pergamino", PER: "Personalizado" },
   en: { GRN: "Green", VLT: "Violet", GRY: "Greys", RED: "Reds", RNB: "Rainbow", NVD: "Christmas", HLW: "Halloween", SNV: "Valentine's",
-    ALG: "Cotton candy", SOL: "Sun", DREAM: "Dream", PLASMA: "Plasma", GRID: "Grid Shift", CONTOUR: "Contour", GALAXY: "Galaxy", CRT: "CRT", PER: "Custom" },
+    ALG: "Cotton candy", SOL: "Sun", DREAM: "Dream", PLASMA: "Plasma", GRID: "Grid Shift", CONTOUR: "Contour", GALAXY: "Galaxy", CRT: "CRT", FLUJO: "Flow", CIRCUITO: "Circuit", LAVA: "Lava lamp", CONSTELACION: "Constellation", BRASAS: "Embers", ALBERCA: "Pool floor", LLUVIA: "Digital rain", RETRO: "Retro sunset", MANA: "Mana cycle", PERG: "Parchment", PER: "Custom" },
 };
 
 let perfil = null, indiceDocs = null;

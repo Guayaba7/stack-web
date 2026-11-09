@@ -1,8 +1,8 @@
 // Temas de Stack en la web. El tema se elige en la app (perk de la app) y viaja cifrado en la cuenta; aqui solo se APLICA.
 // Lo que sigue esta copiado de la app (S-0.6.7-BETA) para que se vea y se mueva igual: colores del tema personalizado
 // (PER) y fondos animados de pantalla completa (GALAXY, PLASMA, CONTOUR, GRID).
-export const PALETAS = ["GRN", "VLT", "GRY", "RED", "RNB", "NVD", "HLW", "SNV", "ALG", "SOL", "DREAM", "PLASMA", "GRID", "CONTOUR", "GALAXY", "CRT", "PER"];
-const CLARO = { ALG: "#fff4fa", DREAM: "#fcf6fb" };
+export const PALETAS = ["GRN", "VLT", "GRY", "RED", "RNB", "NVD", "HLW", "SNV", "ALG", "SOL", "DREAM", "PLASMA", "GRID", "CONTOUR", "GALAXY", "CRT", "FLUJO", "CIRCUITO", "LAVA", "CONSTELACION", "BRASAS", "ALBERCA", "LLUVIA", "RETRO", "MANA", "PERG", "PER"];
+const CLARO = { ALG: "#fff4fa", DREAM: "#fcf6fb", PERG: "#efe4cc" };
 let cfg = { tema_personal: null };
 
 // ---------------------------------------------------------------- de la app: tema personalizado
@@ -207,6 +207,140 @@ const FONDOS = {
     },
   },
 };
+// ---- temas animados de 0.9.2: FLUJO, CIRCUITO, LAVA, CONSTELACION, BRASAS, ALBERCA, LLUVIA, RETRO y MANA.
+// Cada uno: init(W, H) -> estado, draw(cx, W, H, t (s), E, dt (s)), y opcional ui(t, E) -> variables de color de la app que
+// siguen al efecto (como GALAXY). escala < 1 = se dibuja en un lienzo chico y se estira (efectos con desenfoque: mucho mas ligero).
+const FONDOS_092 = (() => {
+  const R = (a, b) => a + Math.random() * (b - a), TAU = Math.PI * 2;
+  const hsl3 = (h, s, l) => { const k = n => (n + h / 30) % 12, a = s * Math.min(l, 1 - l), f = n => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1)); return [f(0) * 255, f(8) * 255, f(4) * 255]; };
+  const cuantos = (W, H, por, min, max) => Math.max(min, Math.min(max, Math.round(W * H / por)));
+  const D = {
+    FLUJO: {                                         // particulas que siguen corrientes y dejan trazos de colores
+      init(W, H) { return {p: Array.from({length: cuantos(W, H, 220, 300, 2200)}, () => [R(0, W), R(0, H)])}; },
+      draw(x, W, H, t, E, dt) {
+        x.fillStyle = "rgba(5,5,8,.06)"; x.fillRect(0, 0, W, H);
+        for (const q of E.p) {
+          const a = Math.sin(q[0] * .006 + t * .3) * 2 + Math.cos(q[1] * .008 - t * .2) * 2, nx = q[0] + Math.cos(a) * 55 * dt, ny = q[1] + Math.sin(a) * 55 * dt;
+          x.strokeStyle = `hsla(${(a * 60 + t * 20 + 720) % 360},90%,65%,.5)`; x.beginPath(); x.moveTo(q[0], q[1]); x.lineTo(nx, ny); x.stroke(); q[0] = nx; q[1] = ny;
+          if (nx < 0 || nx > W || ny < 0 || ny > H || Math.random() < .004) { q[0] = R(0, W); q[1] = R(0, H); }
+        }
+      }},
+    CIRCUITO: {                                      // pistas de cobre con pulsos cian
+      init(W, H) {
+        const rutas = [], s = 14;
+        for (let i = 0; i < cuantos(W, H, 9000, 20, 140); i++) {
+          let px = Math.round(R(0, W) / s) * s, py = Math.round(R(0, H) / s) * s; const pts = [[px, py]];
+          for (let k = 0; k < 8; k++) { if (k % 2) px += (Math.random() < .5 ? -1 : 1) * s * (1 + (Math.random() * 7 | 0)); else py += (Math.random() < .5 ? -1 : 1) * s * (1 + (Math.random() * 5 | 0)); pts.push([px, py]); }
+          let L = 0; for (let k = 1; k < pts.length; k++) L += Math.abs(pts[k][0] - pts[k - 1][0]) + Math.abs(pts[k][1] - pts[k - 1][1]);
+          rutas.push({pts, L, f: R(0, 1), v: R(.12, .35)});
+        }
+        return {rutas};
+      },
+      draw(x, W, H, t, E, dt) {
+        x.fillStyle = "#03080d"; x.fillRect(0, 0, W, H); x.lineWidth = 2;
+        for (const r of E.rutas) {
+          x.strokeStyle = "rgba(190,130,60,.42)"; x.beginPath(); r.pts.forEach(([a, b], k) => k ? x.lineTo(a, b) : x.moveTo(a, b)); x.stroke();
+          x.fillStyle = "rgba(220,160,80,.7)"; for (const [a, b] of [r.pts[0], r.pts[r.pts.length - 1]]) { x.beginPath(); x.arc(a, b, 3, 0, TAU); x.fill(); }
+          r.f = (r.f + r.v * dt) % 1; let d = r.f * r.L, p = null;
+          for (let k = 1; k < r.pts.length; k++) { const [a, b] = r.pts[k - 1], [c, e] = r.pts[k], s = Math.abs(c - a) + Math.abs(e - b); if (d <= s) { const q = s ? d / s : 0; p = [a + (c - a) * q, b + (e - b) * q]; break; } d -= s; }
+          if (p) { const g = x.createRadialGradient(p[0], p[1], 0, p[0], p[1], 11); g.addColorStop(0, "rgba(120,255,240,1)"); g.addColorStop(1, "rgba(60,240,230,0)"); x.fillStyle = g; x.beginPath(); x.arc(p[0], p[1], 11, 0, TAU); x.fill(); }
+        }
+        x.lineWidth = 1;
+      }},
+    LAVA: {                                          // lampara de lava: burbujas que suben, bajan y se funden
+      escala: .25,
+      init() { return {b: Array.from({length: 10}, (_, i) => ({x: R(.08, .92), f: R(.12, .3), ph: R(0, 6), r: R(.07, .14), c: i % 2}))}; },
+      draw(x, W, H, t, E) {
+        x.fillStyle = "#0e0410"; x.fillRect(0, 0, W, H); x.filter = `blur(${Math.max(3, W * .012)}px)`; x.globalCompositeOperation = "lighter";
+        for (const b of E.b) { const y = H * (.5 + .45 * Math.sin(t * b.f + b.ph)), xx = W * b.x + Math.sin(t * .5 + b.ph) * W * .06; x.fillStyle = b.c ? "rgba(255,80,170,.85)" : "rgba(255,150,40,.85)"; x.beginPath(); x.arc(xx, y, b.r * Math.min(W, H) * .85, 0, TAU); x.fill(); }
+        x.filter = "none"; x.globalCompositeOperation = "source-over";
+      }},
+    CONSTELACION: {                                  // estrellas que flotan y se unen con lineas doradas al acercarse
+      init(W, H) { return {n: Array.from({length: cuantos(W, H, 14000, 40, 150)}, () => ({x: R(0, W), y: R(0, H), vx: R(-14, 14), vy: R(-14, 14)}))}; },
+      draw(x, W, H, t, E, dt) {
+        const g = x.createRadialGradient(W * .6, H * .4, 0, W * .6, H * .4, W); g.addColorStop(0, "#151040"); g.addColorStop(1, "#03020f"); x.fillStyle = g; x.fillRect(0, 0, W, H);
+        for (const a of E.n) { a.x += a.vx * dt; a.y += a.vy * dt; if (a.x < 0 || a.x > W) a.vx *= -1; if (a.y < 0 || a.y > H) a.vy *= -1; }
+        const L = 110;
+        for (let i = 0; i < E.n.length; i++) for (let j = i + 1; j < E.n.length; j++) { const a = E.n[i], b = E.n[j], dx = a.x - b.x, dy = a.y - b.y; if (Math.abs(dx) > L || Math.abs(dy) > L) continue; const d = Math.hypot(dx, dy);
+          if (d < L) { x.strokeStyle = `rgba(255,215,140,${(1 - d / L) * .55})`; x.beginPath(); x.moveTo(a.x, a.y); x.lineTo(b.x, b.y); x.stroke(); } }
+        x.fillStyle = "#fff4d8"; for (const a of E.n) { x.beginPath(); x.arc(a.x, a.y, 1.7, 0, TAU); x.fill(); }
+      }},
+    BRASAS: {                                        // chispas que suben desde un fuego abajo
+      init(W, H) { return {p: Array.from({length: cuantos(W, H, 4500, 120, 500)}, () => ({x: R(0, W), y: R(0, H), v: R(25, 85), s: R(.6, 2.6), f: R(0, 6)}))}; },
+      draw(x, W, H, t, E, dt) {
+        x.fillStyle = "rgba(9,3,3,.35)"; x.fillRect(0, 0, W, H);
+        const g = x.createRadialGradient(W / 2, H * 1.15, 10, W / 2, H * 1.15, H * .95); g.addColorStop(0, `rgba(255,90,20,${.35 + .08 * Math.sin(t * 3)})`); g.addColorStop(1, "rgba(255,60,10,0)"); x.fillStyle = g; x.fillRect(0, 0, W, H);
+        x.globalCompositeOperation = "lighter";
+        for (const p of E.p) { p.y -= p.v * dt; p.x += Math.sin(t * 1.5 + p.f) * .6; if (p.y < -5) { p.y = H + 5; p.x = R(0, W); }
+          const a = Math.max(0, p.y / H) * (.6 + .4 * Math.sin(t * 8 + p.f)); x.fillStyle = `rgba(255,${120 + (p.f * 20 | 0)},40,${a})`; x.beginPath(); x.arc(p.x, p.y, p.s, 0, TAU); x.fill(); }
+        x.globalCompositeOperation = "source-over";
+      }},
+    ALBERCA: {                                       // reflejos de luz del fondo de una alberca
+      escala: .08,
+      init() { return {}; },
+      draw(x, w, h, t) {
+        const img = x.createImageData(w, h), d = img.data, s = t * .35, z = 96 / w;
+        for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+          const u = i * z * .13, v = j * z * .13, c = Math.abs(Math.sin(u + Math.sin(v + s) * 1.3 + s) + Math.sin(v * 1.2 + Math.sin(u * .8 - s) * 1.4 - s * .7));
+          const l = Math.pow(Math.max(0, 1 - c * .6), 4) * .5, k = (j * w + i) * 4; d[k] = 3 + l * 90; d[k + 1] = 22 + l * 200; d[k + 2] = 28 + l * 200; d[k + 3] = 255;
+        }
+        x.putImageData(img, 0, 0);
+      }},
+    LLUVIA: {                                        // columnas de simbolos que caen, azul hielo
+      init(W, H) { const c = 14; return {c, cols: Array.from({length: Math.ceil(W / c)}, () => ({y: R(-H, 0), v: R(45, 130)}))}; },
+      draw(x, W, H, t, E, dt) {
+        x.fillStyle = "rgba(2,6,12,.18)"; x.fillRect(0, 0, W, H); x.font = "13px monospace";
+        const G = "WUBRG0123456789ABCDEFΣΔΛ✦◇";
+        E.cols.forEach((c, i) => { c.y += c.v * dt; if (c.y > H + 60) { c.y = R(-80, 0); c.v = R(45, 130); }
+          x.fillStyle = "#e8f8ff"; x.fillText(G[(Math.random() * G.length) | 0], i * E.c, c.y); x.fillStyle = "rgba(90,180,255,.7)"; x.fillText(G[(Math.random() * G.length) | 0], i * E.c, c.y - 14); });
+      }},
+    RETRO: {                                         // sol de rayas, montanas y palmeras (los nombres ciclan por el atardecer con CSS)
+      init() { return {}; },
+      draw(x, W, H, t) {
+        const g = x.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#12052a"); g.addColorStop(.55, "#6b1a5c"); g.addColorStop(.75, "#ff6f61"); g.addColorStop(1, "#2a0a2a"); x.fillStyle = g; x.fillRect(0, 0, W, H);
+        const r = H * .26, sy = H * .6 + Math.sin(t * .2) * 10, sg = x.createLinearGradient(0, sy - r, 0, sy + r); sg.addColorStop(0, "#ffe66b"); sg.addColorStop(1, "#ff3d8a"); x.fillStyle = sg; x.beginPath(); x.arc(W * .5, sy, r, 0, TAU); x.fill();
+        x.fillStyle = "#3a0c3e"; for (let k = 0; k < 8; k++) { const yy = sy + r * .08 + k * k * (r / 30) + ((t * 10) % (r / 8)); x.fillRect(W * .5 - r, yy, r * 2, 2 + k); }
+        x.fillStyle = "#1a0620"; x.beginPath(); x.moveTo(0, H); for (let i = 0; i <= W; i += 12) x.lineTo(i, H * .78 - Math.abs(Math.sin(i * .006)) * H * .12 - Math.abs(Math.sin(i * .017)) * H * .05); x.lineTo(W, H); x.fill();
+        x.strokeStyle = "#0b0310"; x.lineWidth = 4;
+        for (const px of [W * .1, W * .88]) { const top = H * .5; x.beginPath(); x.moveTo(px, H); x.quadraticCurveTo(px + 10, H * .7, px + 18, top); x.stroke();
+          for (let k = 0; k < 7; k++) { const a = k * .95 + Math.sin(t + k) * .08; x.beginPath(); x.moveTo(px + 18, top); x.quadraticCurveTo(px + 18 + Math.cos(a) * 40, top + Math.sin(a) * 16 - 12, px + 18 + Math.cos(a) * 64, top + Math.abs(Math.sin(a)) * 30); x.stroke(); } }
+        x.lineWidth = 1;
+      }},
+    MANA: {                                          // ciclo de mana: domina un color y toda la app se pinta de el
+      init(W, H) { return {p: Array.from({length: cuantos(W, H, 9000, 80, 260)}, () => ({x: R(0, W), y: R(0, H), r: R(1, 3.2), v: R(12, 36)})), c: [250, 240, 200]}; },
+      draw(x, W, H, t, E, dt) {
+        const C = [[250, 240, 200], [80, 160, 255], [170, 110, 200], [255, 90, 60], [80, 210, 120]], f = (t / 7) % 5, i = Math.floor(f), a = C[i], b = C[(i + 1) % 5];
+        const k = Math.max(0, (f - i - .8) * 5); E.c = a.map((v, j) => v + (b[j] - v) * k);
+        const c = E.c.map(Math.round).join(",");
+        x.fillStyle = "rgba(7,6,9,.25)"; x.fillRect(0, 0, W, H);
+        const g = x.createRadialGradient(W * .5, H * 1.1, 0, W * .5, H * 1.1, H * 1.2); g.addColorStop(0, `rgba(${c},.35)`); g.addColorStop(1, "rgba(0,0,0,0)"); x.fillStyle = g; x.fillRect(0, 0, W, H);
+        x.globalCompositeOperation = "lighter"; x.fillStyle = `rgba(${c},.6)`;
+        for (const p of E.p) { p.y -= p.v * dt; if (p.y < 0) { p.y = H; p.x = R(0, W); } x.beginPath(); x.arc(p.x, p.y, p.r, 0, TAU); x.fill(); }
+        x.globalCompositeOperation = "source-over";
+      },
+      ui(t, E) { const c = E.c.map(Math.round).join(","); return {acc: `rgb(${c})`, ani: `rgb(${c})`, sel: `rgba(${c},.22)`, line: `rgba(${c},.36)`, selline: `rgba(${c},.6)`, sel2: `rgba(${c},.12)`}; }},
+  };
+  void hsl3;
+  // adaptador al motor de fondos de Stack (FONDOS: iniciar / medir / dibujar)
+  const out = {};
+  for (const [k, d] of Object.entries(D)) out[k] = {
+    iniciar(F) { return {tp: null}; },
+    medir(F, est) {
+      if (d.escala) { est.cv = est.cv || document.createElement("canvas"); est.cv.width = Math.max(8, Math.round(F.w * d.escala)); est.cv.height = Math.max(8, Math.round(F.h * d.escala)); est.cx = est.cv.getContext("2d"); }
+      est.W = d.escala ? est.cv.width : F.w; est.H = d.escala ? est.cv.height : F.h; est.E = d.init(est.W, est.H);
+      F.cx.fillStyle = "#000"; F.cx.fillRect(0, 0, F.w, F.h);
+    },
+    dibujar(F, est, ms) {
+      const t = ms / 1000, dt = est.tp == null ? .05 : Math.max(0, Math.min(.1, t - est.tp)); est.tp = t;
+      if (d.escala) { d.draw(est.cx, est.W, est.H, t, est.E, dt); F.cx.imageSmoothingEnabled = true; F.cx.drawImage(est.cv, 0, 0, F.w, F.h); }
+      else d.draw(F.cx, F.w, F.h, t, est.E, dt);
+      if (d.ui) { const u = d.ui(t, est.E), st = document.body.style; for (const v in u) st.setProperty("--" + v, u[v]); FONDO.uiVars = Object.keys(u); }
+    },
+  };
+  return out;
+})();
+Object.assign(FONDOS, FONDOS_092);
+
 function animacionPermitida() {
   return document.body.dataset.anim !== "NO" && !(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
 }
@@ -228,6 +362,8 @@ function cuadroFondo(ahora) {
 function actualizarFondo() {
   const F = FONDO, tema = FONDOS[document.body.dataset.tema] ? document.body.dataset.tema : null;
   if (F.raf) { cancelAnimationFrame(F.raf); F.raf = 0; }
+  document.body.classList.toggle("lienzo", !!tema && !!FONDOS_092[tema]);
+  if (F.uiVars && F.tema !== tema) { for (const v of F.uiVars) if (document.body.dataset.tema !== "PER" || v === "ani") document.body.style.removeProperty("--" + v); F.uiVars = null; }
   if (!tema) {                                         // otro tema: se libera todo
     if (F.cv) { F.cv.width = F.cv.height = 0; F.cv.style.display = "none"; }
     F.tema = null; F.est = null; return;

@@ -105,17 +105,55 @@ body[data-tema="PLASMA"] main,body[data-tema="GRID"] main,body[data-tema="CONTOU
 /* apagar animaciones: opcion de la app o 'reducir movimiento' del sistema */
 body[data-anim="NO"],body[data-anim="NO"] *{animation:none!important}
 @media (prefers-reduced-motion: reduce){body,body *{animation:none!important}}
-/* CRT (0.9.1): monitor viejo de fosforo verde. Lineas de barrido, vineta, un brillo que baja despacio y un parpadeo leve. */
-body[data-tema="CRT"]{--bg:#020b05;--panel:#03110a;--line:#0f4a26;--txt:#8dffae;--dim:#3fa565;--acc:#39ff7a;--amb:#d6ff6b;--sel:#0b3a1d;--err:#ff6b5b;
-  --hi:#d9ffe4;--foil:#9fffd0;--etched:#c6ff9f;--har:#ffd36b;--grid:#0a2c17;--sel2:#06240f;--selline:#2bd862;--edit:#04170b;--bueno:#39ff7a;--malo:#ff6b5b;--ani:#39ff7a}
-body[data-tema="CRT"] main,body[data-tema="CRT"] header{text-shadow:0 0 4px rgba(57,255,122,.5)}
+/* CRT: monitor viejo de fosforo blanco. Lineas de barrido, vineta, un brillo que baja despacio y un parpadeo leve. */
+body[data-tema="CRT"]{--bg:#05070c;--panel:#080c14;--line:#28354a;--txt:#d8e6ff;--dim:#7f90ad;--acc:#bcd6ff;--amb:#ffffff;--sel:#152238;--err:#ff8f8f;
+  --hi:#ffffff;--foil:#c6e0ff;--etched:#e0d6ff;--har:#ffc0c0;--grid:#111a2a;--sel2:#0d1626;--selline:#7f9ccc;--edit:#0a101c;--bueno:#9cf0c4;--malo:#ff8f8f;--ani:#d6e6ff}
+body[data-tema="CRT"] main,body[data-tema="CRT"] header{text-shadow:0 0 5px rgba(170,205,255,.55)}
 body[data-tema="CRT"]::before{content:"";position:fixed;inset:0;z-index:90;pointer-events:none;
   background:repeating-linear-gradient(0deg,rgba(0,0,0,.26) 0 1px,transparent 1px 3px),radial-gradient(ellipse at center,transparent 58%,rgba(0,0,0,.55) 100%);
   animation:crt-parpadeo 5s steps(1) infinite}
 body[data-tema="CRT"]::after{content:"";position:fixed;left:0;right:0;top:-18%;height:18%;z-index:91;pointer-events:none;
-  background:linear-gradient(transparent,rgba(140,255,170,.07),transparent);animation:crt-barrido 8s linear infinite}
+  background:linear-gradient(transparent,rgba(200,225,255,.08),transparent);animation:crt-barrido 8s linear infinite}
 @keyframes crt-barrido{to{transform:translateY(680%)}}
 @keyframes crt-parpadeo{0%,100%{opacity:1}46%{opacity:.86}47%{opacity:1}72%{opacity:.93}73%{opacity:1}}
 body[data-anim="NO"]::before,body[data-anim="NO"]::after{animation:none!important}
 body[data-anim="NO"][data-tema="CRT"]::after{display:none}
 @media (prefers-reduced-motion: reduce){body::before,body::after{animation:none!important} body[data-tema="CRT"]::after{display:none}}
+
+/* ---- temas de 0.9.2 (los mismos de la app). body.lienzo = tema con fondo animado */
+body.lienzo{background:transparent}
+body.lienzo main{text-shadow:0 1px 2px rgba(0,0,0,.9)}
+body[data-tema="FLUJO"]{--bg:#050508;--panel:rgba(12,12,18,.82);--line:rgba(200,200,255,.28);--txt:#efefff;--dim:#9a9ab8;--acc:#ff9de2;--amb:#8fd3ff;--sel:rgba(120,90,190,.34);--err:#ff6b8b;--hi:#fff;
+  --foil:#8fd3ff;--etched:#ff9de2;--har:#ffb3c7;--grid:rgba(120,120,180,.22);--sel2:rgba(90,70,150,.26);--selline:#a07bff;--edit:rgba(14,12,24,.74);--bueno:#7ee0a1;--malo:#ff6b8b;--ani:#ff9de2}
+body[data-tema="CIRCUITO"]{--bg:#03080d;--panel:rgba(7,18,26,.84);--line:rgba(200,140,60,.36);--txt:#e9f6f7;--dim:#8aa3a6;--acc:#3ff0e0;--amb:#e0a050;--sel:rgba(30,140,140,.32);--err:#ff7a7a;--hi:#fff;
+  --foil:#7ff0ff;--etched:#e0a050;--har:#ffb38a;--grid:rgba(120,90,40,.25);--sel2:rgba(20,100,100,.26);--selline:#2bc8bc;--edit:rgba(6,16,22,.76);--bueno:#5ee0a0;--malo:#ff7a7a;--ani:#3ff0e0}
+body[data-tema="LAVA"]{--bg:#0e0410;--panel:rgba(24,8,28,.82);--line:rgba(255,120,160,.35);--txt:#ffe9f3;--dim:#b98aa2;--acc:#ff7ab0;--amb:#ffb347;--sel:rgba(160,40,110,.36);--err:#ff6b6b;--hi:#fff;
+  --foil:#ffc2e0;--etched:#ffb347;--har:#ff9e9e;--grid:rgba(140,50,100,.25);--sel2:rgba(120,30,80,.28);--selline:#ff5fa0;--edit:rgba(26,8,28,.76);--bueno:#7ee0a1;--malo:#ff6b6b;--ani:#ff7ab0}
+body[data-tema="CONSTELACION"]{--bg:#05041a;--panel:rgba(11,10,40,.82);--line:rgba(160,150,255,.32);--txt:#ecebff;--dim:#9a97c8;--acc:#ffd27a;--amb:#a9b6ff;--sel:rgba(90,80,200,.34);--err:#ff7a9a;--hi:#fff;
+  --foil:#a9b6ff;--etched:#ffd27a;--har:#ffb3c7;--grid:rgba(90,80,180,.25);--sel2:rgba(60,50,150,.28);--selline:#8f86ff;--edit:rgba(10,8,34,.76);--bueno:#7ee0a1;--malo:#ff7a9a;--ani:#ffd27a}
+body[data-tema="BRASAS"]{--bg:#090303;--panel:rgba(20,6,5,.84);--line:rgba(200,80,30,.38);--txt:#ffe6d6;--dim:#b78470;--acc:#ff7a2f;--amb:#ffc35a;--sel:rgba(150,45,15,.38);--err:#ff5050;--hi:#fff;
+  --foil:#ffd08a;--etched:#ffc35a;--har:#ff9e7a;--grid:rgba(130,50,20,.25);--sel2:rgba(110,30,10,.3);--selline:#ff6a20;--edit:rgba(20,6,5,.78);--bueno:#9be36a;--malo:#ff5050;--ani:#ff8a3c}
+body[data-tema="ALBERCA"]{--bg:#021216;--panel:rgba(6,32,38,.82);--line:rgba(90,210,220,.32);--txt:#e2fbfb;--dim:#7fb1b4;--acc:#5ff0ea;--amb:#c4ffe8;--sel:rgba(30,130,140,.34);--err:#ff7a8a;--hi:#fff;
+  --foil:#9ff8ff;--etched:#c4ffe8;--har:#ffb3c7;--grid:rgba(40,140,150,.22);--sel2:rgba(20,100,110,.28);--selline:#3fd8d0;--edit:rgba(4,26,30,.78);--bueno:#7ee0a1;--malo:#ff7a8a;--ani:#5ff0ea}
+body[data-tema="LLUVIA"]{--bg:#02060c;--panel:rgba(6,16,28,.84);--line:rgba(90,170,255,.35);--txt:#d9ecff;--dim:#7d9cc0;--acc:#7fd4ff;--amb:#c9f1ff;--sel:rgba(40,110,200,.35);--err:#ff7a8a;--hi:#fff;
+  --foil:#c9f1ff;--etched:#a9c8ff;--har:#ffb3c7;--grid:rgba(40,90,160,.25);--sel2:rgba(30,80,150,.28);--selline:#5fb8ff;--edit:rgba(4,12,24,.78);--bueno:#7ee0a1;--malo:#ff7a8a;--ani:#7fd4ff}
+body[data-tema="MANA"]{--bg:#070609;--panel:rgba(14,12,18,.84);--line:rgba(220,200,150,.32);--txt:#f3efe6;--dim:#a39d8e;--acc:#f2d48a;--amb:#f2d48a;--sel:rgba(140,120,70,.30);--err:#ff7a7a;--hi:#fff;
+  --foil:#8fd0ff;--etched:#c9a0ff;--har:#ffb38a;--grid:rgba(120,110,80,.22);--sel2:rgba(110,95,60,.2);--selline:#d8b870;--edit:rgba(12,10,16,.78);--bueno:#7ee0a1;--malo:#ff7a7a;--ani:#f2d48a}
+body[data-tema="MANA"] h1,body[data-tema="MANA"] h2,body[data-tema="MANA"] .marca{text-shadow:0 0 8px var(--acc),0 1px 2px rgba(0,0,0,.95)}
+body[data-tema="RETRO"]{animation:galaxia-h 16s steps(160) infinite;
+  --bg:#0d0517;--panel:rgba(23,10,36,.82);--line:rgba(255,110,170,.35);--txt:#ffeaf5;--dim:#b98aa8;--acc:#ff6fae;--amb:#ffb347;--sel:rgba(160,40,120,.36);--err:#ff6b6b;--hi:#fff;
+  --foil:#ffd06b;--etched:#ff9ec8;--har:#ffb38a;--grid:rgba(140,50,110,.25);--sel2:rgba(120,30,90,.28);--selline:#ff5fa0;--edit:rgba(22,8,30,.78);--bueno:#7ee0a1;--malo:#ff6b6b;
+  --ani:#ff6fae;--ani:hsl(calc(335deg + 30deg * sin(var(--gh))) 100% 70%)}
+
+body[data-tema="RETRO"] .nombre,body[data-tema="RETRO"] h1,body[data-tema="RETRO"] h2,body[data-tema="RETRO"] .marca,body[data-tema="RETRO"] .grupo-nombre{color:#ff9ec8;color:hsl(calc(335deg + 30deg * sin(var(--gh) + 40deg)) 100% 76%);
+  text-shadow:0 0 8px hsl(calc(335deg + 30deg * sin(var(--gh) + 40deg)) 100% 60% / .55),0 1px 2px rgba(0,0,0,.95)}
+body[data-tema="RETRO"] .lista .titulo,body[data-tema="RETRO"] .meta-nom{color:#ffc2dc;color:hsl(calc(335deg + 30deg * sin(var(--gh) + var(--o, 0deg))) 100% 80%)}
+body[data-tema="RETRO"] .lista li:nth-child(8n+2),body[data-tema="RETRO"] .meta-tar:nth-child(8n+2){--o:45deg} body[data-tema="RETRO"] .lista li:nth-child(8n+3),body[data-tema="RETRO"] .meta-tar:nth-child(8n+3){--o:90deg}
+body[data-tema="RETRO"] .lista li:nth-child(8n+4),body[data-tema="RETRO"] .meta-tar:nth-child(8n+4){--o:135deg} body[data-tema="RETRO"] .lista li:nth-child(8n+5),body[data-tema="RETRO"] .meta-tar:nth-child(8n+5){--o:180deg}
+body[data-tema="RETRO"] .lista li:nth-child(8n+6),body[data-tema="RETRO"] .meta-tar:nth-child(8n+6){--o:225deg} body[data-tema="RETRO"] .lista li:nth-child(8n+7),body[data-tema="RETRO"] .meta-tar:nth-child(8n+7){--o:270deg}
+body[data-tema="RETRO"] .lista li:nth-child(8n),body[data-tema="RETRO"] .meta-tar:nth-child(8n){--o:315deg}
+/* Pergamino: claro sepia */
+body[data-tema="PERG"]{--bg:#efe4cc;--panel:#e6d7b8;--line:#c2ab80;--txt:#3b2a16;--dim:#7d6646;--acc:#8a3b12;--amb:#9a5a12;--sel:#dcc79c;--err:#a8261f;--hi:#1f1408;
+  --foil:#2c5f8a;--etched:#6a3f8a;--har:#9a3a5a;--grid:#e0cfa8;--sel2:#e4d4b0;--selline:#a8743c;--edit:#f5ecd8;--bueno:#2f7a3a;--malo:#a8261f;--ani:#7a2e0c;
+  background-image:radial-gradient(circle at 20% 30%,rgba(120,80,30,.07),transparent 40%),radial-gradient(circle at 80% 70%,rgba(120,80,30,.09),transparent 45%)}
+body[data-tema="PERG"]{color-scheme:light}

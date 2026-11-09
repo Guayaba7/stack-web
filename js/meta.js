@@ -6,7 +6,11 @@ import { DATOS_URL } from "./config.js";
 import { datos, aPesos, yenAPesos, cargarUniverso } from "./datos.js";
 import { t, pesos } from "./i18n.js";
 import * as cuenta from "./cuenta.js";
+import { svgMtg, FONDO, RAREZA_COLOR } from "./filtros.js";
+import { idiomaActual } from "./i18n.js";
 
+const pesos2 = (v) => (v == null || Number.isNaN(v) ? "—" : new Intl.NumberFormat(idiomaActual() === "en" ? "en-US" : "es-MX",
+  { style: "currency", currency: "MXN", currencyDisplay: "narrowSymbol", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v));
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const SIMBOLOS = "https://svgs.scryfall.io/card-symbols/";
 export const FMT_META = ["standard", "pioneer", "modern", "legacy", "pauper", "cedh", "commander"];
@@ -43,6 +47,10 @@ function precioImp(f, tienda) {
   if (tienda === "har") return yenAPesos(f[7]);
   return aPesos(f[5]);
 }
+function precioCartaW(c, tienda) {                 // la version elegida (si el deck la trae y tiene precio) o la mas barata
+  if (c.sid) { const g = nombres().get(c.n); if (g) for (const i of g[2]) { const f = datos().buscar.imp[i]; if (String(f[0]).startsWith(c.sid)) { const v = precioImp(f, tienda); if (v != null) return v; } } }
+  return precioNombre(c.n, tienda);
+}
 function precioNombre(n, tienda) {                  // la impresion mas barata de esa carta en esa tienda (pesos)
   const g = nombres().get(n); if (!g) return null;
   let mejor = null;
@@ -56,7 +64,7 @@ function preciosDeck(cartas, tengo) {
   const out = { tiendas: {}, eco: 0, ecoSin: 0, falta: 0, faltaN: 0, faltan: [] };
   for (const [tk] of TIENDAS) {
     let s = 0, sin = 0;
-    for (const c of enDeck) { const v = precioNombre(c.n, tk); if (v == null) sin += c.q; else s += v * c.q; }
+    for (const c of enDeck) { const v = precioCartaW(c, tk); if (v == null) sin += c.q; else s += v * c.q; }
     out.tiendas[tk] = { total: s, sin };
   }
   const barata = (n) => { let m = null; for (const [tk] of TIENDAS) { const v = precioNombre(n, tk); if (v != null && (m == null || v < m)) m = v; } return m; };
@@ -93,7 +101,7 @@ async function cargarOraculo() {
   if (ORA) return ORA;
   if (!ORA_P) ORA_P = json("oraculo.json").then((d) => {
     const por = new Map(), filas = d.cartas.map((x) => ({ n: x[0], coste: x[1], cmc: x[2] || 0, tipo: x[3], id: x[4], col: x[5], leg: x[6], gc: x[7], cmd: x[8],
-      pareja: x[9], sid: x[10], pt: x[11], rank: x[13] ?? 999999, nn: normal(x[0]) }));
+      pareja: x[9], sid: x[10], pt: x[11], rar: (x[12] || "").slice(0, 1), rank: x[13] ?? 999999, nn: normal(x[0]) }));
     for (const o of filas) { por.set(o.n, o); por.set(o.nn, o); if (o.n.includes(" // ")) { const f = o.n.split(" // ")[0]; if (!por.has(f)) por.set(f, o); por.set(normal(f), o); } }
     ORA = { fmts: d.formatos, filas, por };
     return ORA;
@@ -131,7 +139,7 @@ function problemas(deck) {
 // ---------------------------------------------------------------- lista de un deck (META y deckbuilder)
 function htmlDeck(deck, op = {}) {
   const tienda = op.tienda || "tcg", P = preciosDeck(deck.cartas, op.tengo);
-  const tots = TIENDAS.map(([tk, et]) => `<button type="button" class="dktot${tk === tienda ? " on" : ""}" data-tienda="${tk}">${et} <b class="num">${pesos(P.tiendas[tk].total)}</b>${P.tiendas[tk].sin ? `<sup>${P.tiendas[tk].sin}</sup>` : ""}</button>`).join("");
+  const tots = TIENDAS.map(([tk, et]) => `<button type="button" class="dktot${tk === tienda ? " on" : ""}" data-tienda="${tk}">${et} <b class="num">${pesos2(P.tiendas[tk].total)}</b>${P.tiendas[tk].sin ? `<sup>${P.tiendas[tk].sin}</sup>` : ""}</button>`).join("");
   const cur = [0, 0, 0, 0, 0, 0, 0, 0];
   for (const c of deck.cartas) { if (c.z !== "main" && c.z !== "cmd") continue; const o = oraDe(c.n); if (!o || o.tipo.split(" // ")[0].includes("Land")) continue; cur[Math.min(7, Math.floor(o.cmc))] += c.q; }
   const mx = Math.max(1, ...cur);
@@ -141,14 +149,14 @@ function htmlDeck(deck, op = {}) {
   const prob = op.editable ? problemas(deck) : [];
   let h = "";
   const linea = (c) => {
-    const o = oraDe(c.n), v = precioNombre(c.n, tienda), tg = op.tengo ? op.tengo[c.n] || 0 : null;
+    const o = oraDe(c.n), v = precioCartaW(c, tienda), tg = op.tengo ? op.tengo[c.n] || 0 : null;
     const mal = op.editable && o && ["b", "-"].includes(legal(o, deck.formato));
     return `<li class="dkl${mal ? " ilegal" : ""}" data-n="${esc(c.n)}" data-z="${c.z}"><span class="q num">${c.q}</span><span class="n">${esc(c.n)}</span><span class="c">${coste(o?.coste)}</span>` +
-      `<span class="r num">${v == null ? "—" : pesos(v * c.q)}</span>${tg != null && !BASICAS.has(c.n) ? `<span class="tg ${tg >= c.q ? "ok" : tg ? "medio" : "no"}">${tg >= c.q ? "✓" : `${tg}/${c.q}`}</span>` : `<span class="tg"></span>`}` +
-      `${op.editable ? `<span class="dkb"><button type="button" data-q="-1" aria-label="−">−</button><button type="button" data-q="1" aria-label="+">+</button></span>` : ""}</li>`;
+      `<span class="r num">${v == null ? "—" : pesos2(v * c.q)}</span>${tg != null && !BASICAS.has(c.n) ? `<span class="tg ${tg >= c.q ? "ok" : tg ? "medio" : "no"}">${tg >= c.q ? "✓" : `${tg}/${c.q}`}</span>` : `<span class="tg"></span>`}` +
+      `${op.editable ? `<span class="dkb"><button type="button" data-q="-1" aria-label="−">−</button><button type="button" data-q="1" aria-label="+">+</button><button type="button" class="dk-x" data-x="1" aria-label="${esc(t("dk.quitar_todas"))}" title="${esc(t("dk.quitar_todas"))}">✕</button></span>` : ""}</li>`;
   };
   const zona = (z, titulo) => { const cs = deck.cartas.filter((c) => c.z === z); if (!cs.length) return ""; return `<h3 class="dkg">${esc(titulo)} <span class="tenue">${cs.reduce((s, c) => s + c.q, 0)}</span></h3><ul class="dklista">${cs.map(linea).join("")}</ul>`; };
-  h += zona("cmd", t("dk.comandante"));
+  if (!op.editable) h += zona("cmd", t("dk.comandante"));      // en el editor el comandante tiene su propio lugar arriba
   const main = deck.cartas.filter((c) => c.z === "main"), grupos = new Map();
   for (const c of main) { const g = grupoDe(c.n); if (!grupos.has(g)) grupos.set(g, []); grupos.get(g).push(c); }
   for (const [, g] of GRUPOS) {
@@ -158,8 +166,8 @@ function htmlDeck(deck, op = {}) {
   }
   h += zona("side", t("dk.side")) + zona("quizas", t("dk.quizas"));
   return `<div class="dkres"><div class="dktots">${tots}</div>
-      <p class="tenue">${esc(t("dk.economica"))} <b class="num ambar">${pesos(P.eco)}</b>${P.ecoSin ? ` · ${esc(t("dk.sin_precio", { n: P.ecoSin }))}` : ""}</p>
-      ${op.tengo ? `<p class="tenue">${esc(t("dk.te_falta"))} <b class="num ambar">${P.faltaN}</b> · <b class="num ambar">${pesos(P.falta)}</b>${P.faltaN ? ` <button type="button" class="enlace" data-faltan>${esc(t("dk.copiar_faltan"))}</button>` : ""}</p>` : ""}
+      <p class="tenue">${esc(t("dk.economica"))} <b class="num ambar">${pesos2(P.eco)}</b>${P.ecoSin ? ` · ${esc(t("dk.sin_precio", { n: P.ecoSin }))}` : ""}</p>
+      ${op.tengo ? `<p class="tenue">${esc(t("dk.te_falta"))} <b class="num ambar">${P.faltaN}</b> · <b class="num ambar">${pesos2(P.falta)}</b>${P.faltaN ? ` <button type="button" class="enlace" data-faltan>${esc(t("dk.copiar_faltan"))}</button>` : ""}</p>` : ""}
       <div class="dkstats">${curva}${br}</div>
       ${prob.length ? `<ul class="dkprob">${prob.slice(0, 8).map((p) => `<li>⚠ ${esc(p)}</li>`).join("")}${prob.length > 8 ? `<li>…</li>` : ""}</ul>` : ""}</div>${h || `<p class="tenue">${esc(t("dk.vacio"))}</p>`}`;
 }
@@ -195,6 +203,34 @@ function deckDeArq(F, a, fmt) {
 }
 const tend = (v) => (v == null ? `<span class="tenue">—</span>` : `<span class="${v > 0.4 ? "sube" : v < -0.4 ? "baja" : "tenue"}">${v > 0 ? "▲" : v < 0 ? "▼" : "·"} ${Math.abs(v).toFixed(1)}</span>`);
 
+// ---- carta firma de un arquetipo (como MTGGoldfish): la clave de MTGGoldfish si la hay; si no, la carta mas propia del arquetipo
+const artCarta = (sid) => (sid ? `https://cards.scryfall.io/art_crop/front/${sid[0]}/${sid[1]}/${sid}.jpg` : "");
+function firmaArq(F, a, fmt, R) {
+  M.firmas = M.firmas || new Map();
+  const k = fmt + "|" + a.nombre; if (M.firmas.has(k)) return M.firmas.get(k);
+  const ds = (F?.decks || []).filter((d) => d.arquetipo === a.nombre);
+  const listas = ds.length ? ds.map((d) => d.main || []) : F?.tipicas?.[a.nombre] ? [Object.entries(F.tipicas[a.nombre].main || {})] : [];
+  const cuenta = new Map(), col = new Set();
+  for (const main of listas) for (const [nom] of main) {
+    const o = oraDe(nom); if (!o || o.tipo.split(" // ")[0].includes("Land")) continue;
+    cuenta.set(o.n, (cuenta.get(o.n) || 0) + 1); for (const c of o.id || "") col.add(c);
+  }
+  let n = null;
+  for (const c of a.claves || []) { const o = oraDe(c); if (o) { n = o.n; break; } }
+  if (!n) {
+    let mejor = -1e9;
+    for (const [nom, c] of cuenta) {
+      const o = oraDe(nom), propia = c / Math.max(1, listas.length), general = ((((R.cartas || {})[nom] || {})[fmt] || [0])[0] || 0) / 100;
+      const pts = propia - general + Math.min(6, o.cmc || 0) * 0.01 + (/Creature|Planeswalker/.test(o.tipo) ? 0.05 : 0);
+      if (pts > mejor) { mejor = pts; n = nom; }
+    }
+  }
+  const r = { n, col: [..."WUBRG"].filter((c) => col.has(c)).join("") };
+  M.firmas.set(k, r); return r;
+}
+const OTROS_ARQ = new Set(["Otros", "Others", "Other", "Rogue"]);
+function tierDe(x) { if (OTROS_ARQ.has(x.nombre) || !x.n) return 3; return x.pct >= 5 ? 0 : x.pct >= 2 ? 1 : 2; }
+
 export async function vistaMeta(app, fmtRuta) {
   document.body.classList.remove("en-portada");
   document.body.classList.add("ancho");
@@ -204,20 +240,18 @@ export async function vistaMeta(app, fmtRuta) {
   try { R = await cargarResumen(); } catch { R = null; }
   if (!R) { app.innerHTML = `<h1 class="titulo-vista">META</h1><p class="tenue">${esc(t("meta.sin_datos"))}</p>`; return; }
   let F;
-  try { F = await cargarFormato(fmt); } catch { F = null; }
+  try { [F] = await Promise.all([cargarFormato(fmt), cargarOraculo().catch(() => null)]); } catch { F = null; }
   const tengo = await cargarTengo();
   const S = R.formatos[fmt] || {};
-  if (!ORA) cargarOraculo().then(() => { if (location.hash.startsWith("#/meta")) pintar(); }).catch(() => {});   // tipos y curva
-  const fmts = FMT_META.map((f) => `<a class="chip${f === fmt ? " activo" : ""}" href="#/meta/${f}">${esc(NOMBRE_FMT[f])}${R.formatos[f]?.decks_n != null ? ` <span class="tenue">${R.formatos[f].decks_n}</span>` : ""}</a>`).join("");
+  const fmts = FMT_META.map((f) => `<a class="boton-fmt${f === fmt ? " activo" : ""}" href="#/meta/${f}">${esc(NOMBRE_FMT[f])}${R.formatos[f]?.decks_n != null ? ` <small>${R.formatos[f].decks_n}</small>` : ""}</a>`).join("");
   const vistas = fmt === "commander" ? [] : [["arq", "meta.arquetipos"], ["decks", "meta.decks"], ["staples", "meta.staples"], ["termo", "meta.termometro"]];
   if (fmt === "commander") M.vista = "arq"; else if (!vistas.some((v) => v[0] === M.vista)) M.vista = "arq";
-  const tiendas = TIENDAS.map(([tk, et]) => `<button type="button" class="chip-acab${tk === M.tienda ? " activo" : ""}" data-mt="${tk}">${et}</button>`).join("");
+  const tiendas = TIENDAS.map(([tk, et]) => `<button type="button" class="${tk === M.tienda ? "activo" : ""}" data-mt="${tk}">${et}</button>`).join("");
   const pintar = async () => {
     let filas = [];
     const lista = app.querySelector("#meta-lista"), det = app.querySelector("#meta-det");
-    if (fmt === "commander") {
-      filas = (F?.comandantes || []).map((c) => ({ tipo: "cmd", ...c }));
-    } else if (M.vista === "arq") filas = (S.arquetipos || []).map((a) => ({ tipo: "arq", ...a }));
+    if (fmt === "commander") filas = (F?.comandantes || []).map((c) => ({ tipo: "cmd", ...c }));
+    else if (M.vista === "arq") filas = (S.arquetipos || []).map((a) => ({ tipo: "arq", ...a })).sort((a, b) => tierDe(a) - tierDe(b) || (b.pct || 0) - (a.pct || 0));
     else if (M.vista === "decks") filas = (F?.decks || []).map((d) => ({ tipo: "deck", ...d }));
     else if (M.vista === "staples") filas = (S.staples || []).map((s) => ({ tipo: "staple", ...s }));
     else filas = Object.entries(R.cartas || {}).filter(([, fm]) => fm[fmt] && fm[fmt][1] != null).map(([n, fm]) => ({ tipo: "termo", nombre: n, pct: fm[fmt][0], tend: fm[fmt][1] }))
@@ -229,43 +263,64 @@ export async function vistaMeta(app, fmtRuta) {
     const todas = [];
     for (const x of filas.slice(0, 150)) { const d = deckDe(x); if (d) todas.push(...d.cartas); else if (x.nombre) todas.push({ n: x.nombre }); }
     await asegurarNombres(todas);
-    lista.innerHTML = filas.length ? filas.slice(0, 150).map((x, i) => {
-      const d = deckDe(x), P = d ? preciosDeck(d.cartas, tengo) : null;
-      const precio = P ? pesos(P.tiendas[M.tienda].total) : x.nombre ? pesos(precioNombre(x.nombre, M.tienda)) : "—";
-      const sub = x.tipo === "arq" ? `${x.n ? `${x.pct.toFixed(1)}% · ${x.n} decks` : "—"} · ${tend(x.tend)}${x.pct_gf != null ? ` · MTGGoldfish ${x.pct_gf}%` : ""}`
-        : x.tipo === "deck" ? `${esc(x.fecha)} · ${x.puesto ? x.puesto + "°" : esc(x.resultado || "")} · ${esc(x.evento || "")} · ${esc(FUENTE[x.fuente] || x.fuente)}`
-          : x.tipo === "cmd" ? `#${x.rango} · ${(x.n_decks || 0).toLocaleString()} decks` : `${x.pct.toFixed(1)}% · ${x.tipo === "staple" ? `${x.copias} ${esc(t("meta.copias"))} · ` : ""}${tend(x.tend)}`;
-      return `<button type="button" class="meta-fila${M.sel === i ? " activo" : ""}" data-i="${i}"><span class="medio"><span class="titulo">${esc(x.nombre || x.arquetipo)}</span><span class="sub">${sub}</span></span>` +
-        `<span class="der"><span class="precio num">${precio}</span>${P && tengo ? `<span class="tenue num">${esc(t("dk.falta_corto"))} ${pesos(P.falta)}</span>` : tengo && x.nombre ? `<span class="tenue">${esc(t("dk.tienes"))} ${tengo[x.nombre] || 0}</span>` : ""}</span></button>`;
-    }).join("") : `<p class="tenue">${esc(t("meta.vacio"))}</p>`;
-    const verDet = (i) => {
+    const galeria = M.vista === "arq" || fmt === "commander";
+    lista.classList.toggle("meta-gal", galeria);
+    if (galeria) {
+      const TIERS = ["meta.tier1", "meta.tier2", "meta.tier3", "meta.sin_clasificar"];
+      let h = "", tierAnt = -1;
+      filas.slice(0, 150).forEach((x, i) => {
+        const d = deckDe(x), P = d ? preciosDeck(d.cartas, tengo) : null;
+        if (x.tipo === "arq") { const tr = tierDe(x); if (tr !== tierAnt) { tierAnt = tr; h += `<h3 class="meta-tier">${esc(t(TIERS[tr]))}</h3>`; } }
+        else if (i === 0) h += `<h3 class="meta-tier">${esc(t("meta.top_cmd"))}</h3>`;
+        else if (i === 12) h += `<h3 class="meta-tier">${esc(t("meta.mas_cmd"))}</h3>`;
+        let arte, col, l1;
+        if (x.tipo === "cmd") { const o = oraDe(x.nombre); arte = o?.sid; col = o?.id || ""; l1 = `<span>#${x.rango} · <b>${(x.n_decks || 0).toLocaleString()}</b> decks</span>${tend(x.tendencia == null ? null : Math.max(-9.9, Math.min(9.9, x.tendencia / 3)))}`; }
+        else { const fz = firmaArq(F, x, fmt, R), o = oraDe(fz.n); arte = o?.sid; col = x.colores || fz.col; x._firma = fz.n;
+          l1 = `<span>META <b>${x.n ? x.pct.toFixed(1) + "%" : "—"}</b>${x.n ? ` <i class="tenue">(${x.n})</i>` : ""}</span>${tend(x.tend)}`; }
+        const l2 = `<span>${TIENDAS.find((z) => z[0] === M.tienda)[1]} <b class="num">${P ? pesos2(P.tiendas[M.tienda].total) : "—"}</b></span>${P && tengo ? `<span>${esc(t("dk.falta_corto"))} <b class="num ${P.falta ? "" : "sube"}">${P.falta ? pesos2(P.falta) : "✓"}</b></span>` : ""}`;
+        h += `<button type="button" class="meta-tar${M.sel === i ? " activo" : ""}" data-i="${i}"><span class="meta-arte"${arte ? ` style="background-image:url('${artCarta(arte)}')"` : ""}>` +
+          `<span class="meta-pips">${col ? pips(col) : ""}</span>${x._firma ? `<span class="meta-firma">${esc(x._firma)}</span>` : ""}</span>` +
+          `<span class="meta-nom">${esc(x.nombre)}</span><span class="meta-dat">${l1}</span><span class="meta-dat">${l2}</span></button>`;
+      });
+      lista.innerHTML = h || `<p class="tenue">${esc(t("meta.vacio"))}</p>`;
+    } else {
+      lista.innerHTML = filas.length ? filas.slice(0, 150).map((x, i) => {
+        const d = deckDe(x), P = d ? preciosDeck(d.cartas, tengo) : null;
+        const precio = P ? pesos2(P.tiendas[M.tienda].total) : x.nombre ? pesos2(precioNombre(x.nombre, M.tienda)) : "—";
+        const sub = x.tipo === "deck" ? `${esc(x.fecha)} · ${x.puesto ? x.puesto + "°" : esc(x.resultado || "")} · ${esc(x.evento || "")} · ${esc(FUENTE[x.fuente] || x.fuente)}`
+          : `${x.pct.toFixed(1)}% · ${x.tipo === "staple" ? `${x.copias} ${esc(t("meta.copias"))} · ` : ""}${tend(x.tend)}`;
+        return `<button type="button" class="meta-fila${M.sel === i ? " activo" : ""}" data-i="${i}"><span class="medio"><span class="titulo">${esc(x.nombre || x.arquetipo)}</span><span class="sub">${sub}</span></span>` +
+          `<span class="der"><span class="precio num">${precio}</span>${P && tengo ? `<span class="tenue num">${esc(t("dk.falta_corto"))} ${pesos2(P.falta)}</span>` : tengo && x.nombre ? `<span class="tenue">${esc(t("dk.tienes"))} ${tengo[x.nombre] || 0}</span>` : ""}</span></button>`;
+      }).join("") : `<p class="tenue">${esc(t("meta.vacio"))}</p>`;
+    }
+    const verDet = (i, mover) => {
       M.sel = i;
-      lista.querySelectorAll(".meta-fila").forEach((b) => b.classList.toggle("activo", Number(b.dataset.i) === i));
+      lista.querySelectorAll("[data-i]").forEach((b) => b.classList.toggle("activo", Number(b.dataset.i) === i));
       const x = filas[i], d = x && deckDe(x);
       if (!d) {
         if (x && x.nombre) {
           const fm = (R.cartas || {})[x.nombre] || {};
           det.innerHTML = `<h2>${esc(x.nombre)}</h2><ul class="meta-fmts">${Object.entries(fm).map(([f, [p, tn]]) => `<li><span>${esc(NOMBRE_FMT[f] || f)}</span><span>${p.toFixed(1)}% · ${tend(tn)}</span></li>`).join("")}</ul>` +
-            `<ul class="meta-fmts">${TIENDAS.map(([tk, et]) => `<li><span>${et}</span><span class="num">${pesos(precioNombre(x.nombre, tk))}</span></li>`).join("")}</ul>`;
+            `<ul class="meta-fmts">${TIENDAS.map(([tk, et]) => `<li><span>${et}</span><span class="num">${pesos2(precioNombre(x.nombre, tk))}</span></li>`).join("")}</ul>`;
         } else det.innerHTML = "";
         return;
       }
       const inf = d.info || {};
       det.innerHTML = `<h2>${esc(d.nombre)}</h2><p class="tenue">${esc(NOMBRE_FMT[d.formato] || d.formato)}${inf.evento ? " · " + esc(inf.evento) : ""}${inf.puesto ? ` · ${inf.puesto}°` : ""}${inf.jugador ? " · " + esc(inf.jugador) : ""}` +
         `${inf.fuente ? ` · <a href="${esc(inf.url || "#")}" target="_blank" rel="noopener">${esc(FUENTE[inf.fuente] || inf.fuente)}</a>` : ""}${inf.promedio ? " · " + esc(t("meta.promedio")) : ""}</p>
-        <div class="acciones-deck"><button type="button" class="primario" data-copiar-deck>${esc(t("meta.a_mis_decks"))}</button><button type="button" class="chip-acab" data-texto>${esc(t("meta.copiar_lista"))}</button></div>
+        <div class="acciones-deck"><button type="button" class="primario" data-copiar-deck>${esc(t("meta.a_mis_decks"))}</button><button type="button" class="boton-fmt" data-texto>${esc(t("meta.copiar_lista"))}</button></div>
         <p id="meta-msg" class="tenue" role="status"></p>${htmlDeck(d, { tienda: M.tienda, tengo })}`;
       det.dataset.deck = JSON.stringify({ nombre: d.nombre, formato: d.formato, cartas: d.cartas, origen: d.origen || null });
-      if (matchMedia("(max-width: 899px)").matches) det.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (mover && matchMedia("(max-width: 899px)").matches) det.scrollIntoView({ behavior: "smooth", block: "start" });
     };
-    lista.onclick = (e) => { const b = e.target.closest("[data-i]"); if (b) verDet(Number(b.dataset.i)); };
+    lista.onclick = (e) => { const b = e.target.closest("[data-i]"); if (b) verDet(Number(b.dataset.i), true); };
     if (M.sel != null && filas[M.sel]) verDet(M.sel); else if (filas.length && matchMedia("(min-width: 900px)").matches) verDet(0); else det.innerHTML = "";
   };
   app.innerHTML = `<h1 class="titulo-vista">META</h1>
-    <nav class="chips meta-fmts-nav">${fmts}</nav>
-    ${vistas.length ? `<nav class="chips">${vistas.map(([v, k]) => `<button type="button" class="chip-acab${v === M.vista ? " activo" : ""}" data-mv="${v}">${esc(t(k))}</button>`).join("")}</nav>` : ""}
-    <div class="chips meta-tiendas"><span class="tenue">${esc(t("meta.precios_de"))}</span>${tiendas}</div>
-    <p class="tenue">${esc(t("meta.ventana", { dias: R.ventana_dias, dia: R.dia }))}${S.decks_n != null ? " · " + esc(t("meta.n_decks", { n: S.decks_n, s: S.semana_n })) : ""}</p>
+    <nav class="botones-fmt">${fmts}</nav>
+    <div class="meta-barra">${vistas.length ? `<span class="seg-web">${vistas.map(([v, k]) => `<button type="button" class="${v === M.vista ? "activo" : ""}" data-mv="${v}">${esc(t(k))}</button>`).join("")}</span>` : ""}
+      <span class="meta-tiendas"><span class="tenue">${esc(t("meta.precios_de"))}</span><span class="seg-web">${tiendas}</span></span></div>
+    <p class="tenue meta-nota">${esc(t("meta.ventana", { dias: R.ventana_dias, dia: R.dia }))}${S.decks_n != null ? " · " + esc(t("meta.n_decks", { n: S.decks_n, s: S.semana_n })) : ""}</p>
     <div class="meta-cuerpo"><div id="meta-lista" class="meta-lista"></div><section id="meta-det" class="meta-det"></section></div>
     <p class="nota">${esc(t("meta.creditos"))} <a href="https://topdeck.gg" target="_blank" rel="noopener">TopDeck.gg</a>.</p>`;
   app.onclick = async (e) => {
@@ -319,11 +374,12 @@ export async function vistaDecks(app, id) {
   if (id) { editor(app, id); return; }
   app.innerHTML = `<h1 class="titulo-vista">${esc(t("dk.titulo"))}</h1><p class="tenue">${esc(t("dk.cargando"))}</p>`;
   let ds;
-  try { ds = await listarDecks(); } catch { app.innerHTML += `<p class="error">${esc(t("dk.err_leer"))}</p>`; return; }
+  try { await cargarOraculo().catch(() => null); ds = await listarDecks(); } catch { app.innerHTML += `<p class="error">${esc(t("dk.err_leer"))}</p>`; return; }
   app.innerHTML = `<h1 class="titulo-vista">${esc(t("dk.titulo"))}</h1>
     <div class="acciones-deck"><button type="button" class="primario" data-nuevo>${esc(t("dk.nuevo"))}</button><a class="chip-acab" href="#/meta">META</a></div>
-    <div class="dk-mios">${ds.length ? ds.map((d) => `<a class="meta-fila" href="#/decks/${esc(d.id)}"><span class="medio"><span class="titulo">${esc(d.nombre)}</span>` +
-      `<span class="sub">${esc(NOMBRE_FMT[d.formato] || d.formato)} · ${d.cartas.reduce((s, c) => s + (c.z === "quizas" ? 0 : c.q), 0)} ${esc(t("dk.cartas"))}</span></span></a>`).join("") : `<p class="tenue">${esc(t("dk.sin_decks"))}</p>`}</div>`;
+    <div class="dk-mios meta-gal">${ds.length ? ds.map((d) => { const cmd = d.cartas.find((c) => c.z === "cmd"), o = cmd ? oraDe(cmd.n) : d.cartas.map((c) => oraDe(c.n)).find((x) => x && !x.tipo.includes("Land"));
+      const id_ = identidad(d); return `<a class="meta-tar" href="#/decks/${esc(d.id)}"><span class="meta-arte"${o?.sid ? ` style="background-image:url('${artCarta(cmd?.sid || o.sid)}')"` : ""}><span class="meta-pips">${id_ != null ? pips(id_) : ""}</span><span class="meta-firma">${esc(NOMBRE_FMT[d.formato] || d.formato)}</span></span>` +
+      `<span class="meta-nom">${esc(d.nombre)}</span><span class="meta-dat"><span>${d.cartas.reduce((s, c) => s + (c.z === "quizas" ? 0 : c.q), 0)} ${esc(t("dk.cartas"))}</span></span></a>`; }).join("") : `<p class="tenue">${esc(t("dk.sin_decks"))}</p>`}</div>`;
   app.onclick = async (e) => {
     if (e.target.closest("[data-nuevo]")) {
       try { const nid = await crearDeck({ nombre: t("dk.deck_nuevo"), formato: "commander", cartas: [] }); location.hash = `#/decks/${nid}`; }
@@ -333,8 +389,12 @@ export async function vistaDecks(app, id) {
 }
 const toastMsg = (app, m) => { const p = app.querySelector("#dk-msg"); if (p) p.textContent = m; };
 
-// ---- editor estilo Arena: buscador con imagenes, el deck a un lado (o en otra pestana en el telefono)
-const E = { deck: null, version: 0, q: "", tipos: new Set(), cmc: null, res: [], pest: "buscar", edh: null, t: null, guardando: false, sucio: false, tienda: "tcg" };
+// ---- editor (0.9.2): el deck primero, comandante facil, filtros con los iconos de Stack, quitar con la misma facilidad que agregar
+const E = { deck: null, q: "", qcmd: "", cols: new Set(), tipos: new Set(), rar: new Set(), cmc: null, res: [], pest: "deck", edh: null, t: null, guardando: false, sucio: false, tienda: "tcg" };
+const TIPOS_W = [["Land", "land", "tog.tierra"], ["Creature", "creature", "tog.criatura"], ["Instant", "instant", "tog.instantaneo"], ["Sorcery", "sorcery", "tog.conjuro"],
+  ["Artifact", "artifact", "tog.artefacto"], ["Enchantment", "enchantment", "tog.encantamiento"], ["Planeswalker", "planeswalker", "tog.planeswalker"], ["Battle", "battle", "tog.batalla"]];
+const RAREZAS_W = [["c", "tog.comun"], ["u", "tog.infrecuente"], ["r", "tog.rara"], ["m", "tog.mitica"]];
+const COLORES_W = [["W", "tog.blanco"], ["U", "tog.azul"], ["B", "tog.negro"], ["R", "tog.rojo"], ["G", "tog.verde"], ["C", "tog.incoloro"]];
 async function editor(app, id) {
   app.innerHTML = `<h1 class="titulo-vista">${esc(t("dk.titulo"))}</h1><p class="tenue">${esc(t("dk.cargando"))}</p>`;
   try {
@@ -344,25 +404,48 @@ async function editor(app, id) {
     E.deck = { ...(await cuenta.leer(d.tipo, d.version)), id };
     cuenta.fijarVersion(d.tipo, d.version);
   } catch { app.innerHTML += `<p class="error">${esc(t("dk.err_leer"))}</p>`; return; }
-  E.edh = null; E.q = ""; E.tipos = new Set(); E.cmc = null; E.pest = "buscar";
+  Object.assign(E, { edh: null, q: "", qcmd: "", cols: new Set(), tipos: new Set(), rar: new Set(), cmc: null, pest: "deck" });
   const tengo = await cargarTengo();
   await asegurarNombres(E.deck.cartas);
-  app.innerHTML = `<div class="dk-cab"><a class="enlace" href="#/decks">← ${esc(t("dk.mis_decks"))}</a>
-      <input id="dk-nombre" class="dk-nombre" maxlength="60" value="${esc(E.deck.nombre)}" aria-label="${esc(t("dk.nombre"))}">
-      <select id="dk-fmt" aria-label="${esc(t("dk.formato"))}">${FMT_DECK.map((f) => `<option value="${f}"${f === E.deck.formato ? " selected" : ""}>${esc(NOMBRE_FMT[f])}</option>`).join("")}</select>
-      <span id="dk-estado" class="tenue" role="status"></span></div>
-    <nav class="chips dk-pest">${["buscar", "deck", "edhrec"].map((p) => `<button type="button" class="chip-acab${p === E.pest ? " activo" : ""}" data-pest="${p}">${esc(t("dk.p_" + p))}</button>`).join("")}</nav>
-    <div class="dk-cuerpo"><section id="dk-busca" class="dk-busca"></section><section id="dk-deck" class="dk-deck"></section></div>
-    <div class="acciones-deck"><button type="button" class="chip-acab" data-acc="copiar">${esc(t("meta.copiar_lista"))}</button><button type="button" class="chip-acab" data-acc="compartir">${esc(t("dk.compartir"))}</button>
-      <button type="button" class="chip-acab" data-acc="importar">${esc(t("dk.importar"))}</button><button type="button" class="chip-acab peligro" data-acc="borrar">${esc(t("dk.borrar"))}</button></div>
+  app.innerHTML = `<nav class="dk-migas"><a href="#/decks">‹ ${esc(t("dk.mis_decks"))}</a><span id="dk-estado" class="tenue" role="status"></span></nav>
+    <div class="dk-cab"><input id="dk-nombre" class="dk-nombre" maxlength="60" value="${esc(E.deck.nombre)}" aria-label="${esc(t("dk.nombre"))}">
+      <select id="dk-fmt" aria-label="${esc(t("dk.formato"))}">${FMT_DECK.map((f) => `<option value="${f}"${f === E.deck.formato ? " selected" : ""}>${esc(NOMBRE_FMT[f])}</option>`).join("")}</select></div>
+    <nav class="seg-web dk-pest" id="dk-pest"></nav>
+    <div class="dk-cuerpo"><section id="dk-deck" class="dk-deck"></section><section id="dk-busca" class="dk-busca"></section></div>
+    <div class="acciones-deck"><button type="button" class="boton-fmt" data-acc="copiar">${esc(t("meta.copiar_lista"))}</button><button type="button" class="boton-fmt" data-acc="compartir">${esc(t("dk.compartir"))}</button>
+      <button type="button" class="boton-fmt" data-acc="importar">${esc(t("dk.importar"))}</button><button type="button" class="boton-fmt peligro" data-acc="borrar">${esc(t("dk.borrar"))}</button></div>
     <p id="dk-msg" class="tenue" role="status"></p>`;
   const busca = app.querySelector("#dk-busca"), panel = app.querySelector("#dk-deck"), estado = app.querySelector("#dk-estado"), msg = app.querySelector("#dk-msg");
-  const marcarPest = () => { app.querySelectorAll("[data-pest]").forEach((b) => b.classList.toggle("activo", b.dataset.pest === E.pest)); app.querySelector(".dk-cuerpo").dataset.ver = E.pest; };
+  const nCartas = () => E.deck.cartas.filter((c) => c.z !== "quizas").reduce((s, c) => s + c.q, 0);
+  const pintarPest = () => {                         // EDHREC solo en los formatos de comandante
+    const ps = ["deck", "buscar", ...(esCmd(E.deck.formato) ? ["edhrec"] : [])];
+    if (!ps.includes(E.pest)) E.pest = "deck";
+    app.querySelector("#dk-pest").innerHTML = ps.map((p) => `<button type="button" class="${p === E.pest ? "activo" : ""}" data-pest="${p}">${esc(t("dk.p_" + p))}${p === "deck" ? ` (${nCartas()})` : ""}</button>`).join("");
+    app.querySelector(".dk-cuerpo").dataset.ver = E.pest;
+  };
+  // ---- comandante: un lugar fijo arriba del deck, con su propio buscador de comandantes legales
+  const htmlComandante = () => {
+    if (!esCmd(E.deck.formato)) return "";
+    const cmds = E.deck.cartas.filter((c) => c.z === "cmd"), id_ = identidad(E.deck);
+    const elegidos = cmds.map((c) => { const o = oraDe(c.n); return `<div class="dk-cmd-carta">${o?.sid ? `<img src="${esc(imgCarta(c.sid || o.sid, "normal"))}" alt="${esc(c.n)}" loading="lazy">` : ""}` +
+      `<span class="n">${esc(c.n)}</span><button type="button" class="dk-x" data-quitar-cmd="${esc(c.n)}" aria-label="${esc(t("dk.quitar"))}" title="${esc(t("dk.quitar"))}">✕</button></div>`; }).join("");
+    const pareja = cmds.length === 1 && oraDe(cmds[0].n)?.pareja;
+    const buscador = !cmds.length || pareja ? `<input id="dk-qcmd" type="search" class="dk-q" placeholder="${esc(t(cmds.length ? "dk.buscar_pareja" : "dk.buscar_cmd"))}" autocomplete="off" spellcheck="false" value="${esc(E.qcmd)}"><div id="dk-cmd-res" class="dk-cmd-res"></div>` : "";
+    return `<div class="dk-cmd"><div class="dk-cmd-cab"><b>${esc(t("dk.comandante"))}</b>${id_ != null ? `<span class="dk-ident">${pips(id_)}</span>` : ""}</div>${elegidos ? `<div class="dk-cmd-lista">${elegidos}</div>` : ""}${buscador}</div>`;
+  };
+  const pintarCmdRes = () => {
+    const box = app.querySelector("#dk-cmd-res"); if (!box) return;
+    const toks = normal(E.qcmd).split(" ").filter(Boolean); if (!toks.length) { box.innerHTML = ""; return; }
+    const out = []; for (const o of ORA.filas) { if (!o.cmd) continue; const l = legal(o, E.deck.formato); if (l === "-" || l === "b" || l == null) continue; if (toks.every((tk) => o.nn.includes(tk))) out.push(o); if (out.length > 40) break; }
+    out.sort((a, b) => a.rank - b.rank);
+    box.innerHTML = out.slice(0, 8).map((o) => `<button type="button" class="dk-cmd-op" data-poner-cmd="${esc(o.n)}">${o.sid ? `<img src="${esc(imgCarta(o.sid, "small"))}" alt="" loading="lazy">` : ""}<span>${esc(o.n)}</span><span class="dk-ident">${pips(o.id)}</span></button>`).join("") || `<p class="tenue">${esc(t("dk.sin_res"))}</p>`;
+  };
   const pintarDeck = () => {
-    const id_ = identidad(E.deck);
-    panel.innerHTML = `${esCmd(E.deck.formato) ? `<p class="dk-ident">${esc(t("dk.identidad"))} ${id_ != null ? pips(id_) : `<span class="tenue">${esc(t("dk.marca_cmd"))}</span>`}</p>` : ""}${htmlDeck(E.deck, { tienda: E.tienda, tengo, editable: true })}`;
-    const n = E.deck.cartas.filter((c) => c.z !== "quizas").reduce((s, c) => s + c.q, 0);
-    const bd = app.querySelector("[data-pest='deck']"); if (bd) bd.textContent = `${t("dk.p_deck")} (${n})`;
+    const vacio = !E.deck.cartas.some((c) => c.z !== "cmd");
+    panel.innerHTML = htmlComandante() + (vacio ? `<div class="dk-vacio"><p>${esc(t("dk.vacio_deck"))}</p><button type="button" class="primario" data-pest="buscar">${esc(t("dk.ir_buscar"))}</button></div>`
+      : htmlDeck(E.deck, { tienda: E.tienda, tengo, editable: true }));
+    if (E.qcmd) pintarCmdRes();
+    pintarPest();
   };
   const buscar = () => {
     const D = E.deck, fmt = D.formato, toks = normal(E.q).split(" ").filter(Boolean), id_ = esCmd(fmt) ? identidad(D) : null;
@@ -370,7 +453,9 @@ async function editor(app, id) {
     for (const o of ORA.filas) {
       const l = legal(o, fmt); if (l == null || l === "-" || l === "b") continue;
       if (id_ != null && [...o.id].some((x) => !id_.includes(x))) continue;
+      if (E.cols.size) { if (!o.col) { if (!E.cols.has("C")) continue; } else if (![...o.col].every((x) => E.cols.has(x))) continue; }
       if (E.tipos.size && ![...E.tipos].some((tp) => o.tipo.includes(tp))) continue;
+      if (E.rar.size && !E.rar.has(o.rar)) continue;
       if (E.cmc != null && (E.cmc === 7 ? o.cmc < 7 : Math.floor(o.cmc) !== E.cmc)) continue;
       if (toks.length) { const h = o.nn + " " + normal(o.tipo); if (!toks.every((tk) => h.includes(tk))) continue; }
       out.push(o);
@@ -380,23 +465,33 @@ async function editor(app, id) {
     out.sort((a, b) => (nq && a.nn.startsWith(nq) ? 0 : 1) - (nq && b.nn.startsWith(nq) ? 0 : 1) || a.rank - b.rank);
     E.res = out.slice(0, 120);
   };
-  const enDeck = (n) => E.deck.cartas.filter((c) => c.n === n).reduce((s, c) => s + c.q, 0);
-  const tileHTML = (o, extra = "") => `<div class="dk-tile" data-n="${esc(o.n)}"><button type="button" class="dk-img" data-add="main" aria-label="${esc(t("dk.agregar", { n: o.n }))}">` +
-    `<img src="${esc(imgCarta(o.sid, "normal"))}" alt="${esc(o.n)}" loading="lazy">${enDeck(o.n) ? `<b class="dk-en">${enDeck(o.n)}</b>` : ""}</button>` +
-    `<div class="dk-tile-pie"><span class="num">${pesos(precioNombre(o.n, E.tienda))}</span>${extra}` +
-    `${esCmd(E.deck.formato) && o.cmd ? `<button type="button" data-add="cmd" title="${esc(t("dk.hacer_cmd"))}">CMD</button>` : esCmd(E.deck.formato) ? "" : `<button type="button" data-add="side" title="${esc(t("dk.al_side"))}">SB</button>`}</div></div>`;
+  const enDeck = (n) => E.deck.cartas.filter((c) => c.n === n && c.z !== "cmd").reduce((s, c) => s + c.q, 0);
+  const tileHTML = (o, extra = "") => {
+    const q = enDeck(o.n), cmd = esCmd(E.deck.formato);
+    return `<div class="dk-tile${q ? " en" : ""}" data-n="${esc(o.n)}"><button type="button" class="dk-img" data-add="main" aria-label="${esc(t("dk.agregar", { n: o.n }))}">` +
+      `<img src="${esc(imgCarta(o.sid, "normal"))}" alt="${esc(o.n)}" loading="lazy">${q ? `<b class="dk-en">×${q}</b>` : ""}</button>` +
+      `${q ? `<button type="button" class="dk-menos" data-menos="1" aria-label="${esc(t("dk.quitar"))}" title="${esc(t("dk.quitar"))}">−</button>` : ""}` +
+      `<div class="dk-tile-pie"><span class="num">${pesos2(precioNombre(o.n, E.tienda))}</span>${extra}` +
+      `${cmd && o.cmd ? `<button type="button" data-add="cmd" title="${esc(t("dk.hacer_cmd"))}">CMD</button>` : cmd ? "" : `<button type="button" data-add="side" title="${esc(t("dk.al_side"))}">SB</button>`}</div></div>`;
+  };
+  const filtrosHTML = () => {
+    const id_ = esCmd(E.deck.formato) ? identidad(E.deck) : null;
+    const tg = (on, attr, v, tit, ico, extra = "") => `<button type="button" class="tg${on ? " on" : ""}${extra}" data-${attr}="${v}" aria-pressed="${on}" title="${esc(tit)}" aria-label="${esc(tit)}">${ico}</button>`;
+    const cols = COLORES_W.map(([c, k]) => { const fuera = id_ != null && c !== "C" && !id_.includes(c), on = id_ != null ? !fuera : E.cols.has(c);
+      return tg(on, "col", c, t(k), `<span class="tgmana" style="background:${FONDO[c]}">${svgMtg(c.toLowerCase())}</span>`, fuera ? " fuera" : ""); }).join("");
+    const tipos = TIPOS_W.map(([tp, ico, k]) => tg(E.tipos.has(tp), "tp", tp, t(k), svgMtg(ico, "tgtipo"))).join("");
+    const rar = RAREZAS_W.map(([r, k]) => tg(E.rar.has(r), "rar", r, t(k), `<span style="color:${RAREZA_COLOR[r]}">${svgMtg("rarity")}</span>`)).join("");
+    const activos = E.tipos.size || E.rar.size || E.cmc != null || (id_ == null && E.cols.size);
+    const cmcs = [0, 1, 2, 3, 4, 5, 6, 7].map((n) => `<button type="button" class="${E.cmc === n ? "activo" : ""}" data-cmc="${n}">${n === 7 ? "7+" : n}</button>`).join("");
+    return `<div class="toggles dk-toggles">${cols}<span class="tgsep"></span>${tipos}<span class="tgsep"></span>${rar}${activos ? `<button type="button" class="tg tgx" data-limpiar="1" title="${esc(t("tog.quitar"))}">✕</button>` : ""}</div>` +
+      `<div class="dk-cmc"><span class="tenue">CMC</span><span class="seg-web">${cmcs}</span></div>`;
+  };
   const pintarBusca = async () => {
     if (E.pest === "edhrec") { await pintarEdh(); return; }
-    const tipos = [["Creature", "dk.t_criatura"], ["Instant", "dk.t_instantaneo"], ["Sorcery", "dk.t_conjuro"], ["Artifact", "dk.t_artefacto"], ["Enchantment", "dk.t_encantamiento"],
-      ["Planeswalker", "dk.t_planeswalker"], ["Land", "dk.t_tierra"]].map(([tp, k]) => `<button type="button" class="chip-acab${E.tipos.has(tp) ? " activo" : ""}" data-tp="${tp}">${esc(t(k))}</button>`).join("");
-    const cmcs = [0, 1, 2, 3, 4, 5, 6, 7].map((n) => `<button type="button" class="chip-acab${E.cmc === n ? " activo" : ""}" data-cmc="${n}">${n === 7 ? "7+" : n}</button>`).join("");
-    if (!busca.querySelector("#dk-q")) {
-      busca.innerHTML = `<input id="dk-q" type="search" class="dk-q" placeholder="${esc(t("dk.buscar"))}" autocomplete="off" spellcheck="false" value="${esc(E.q)}">
-        <div class="chips dk-filtros" id="dk-filtros"></div><div class="dk-grid" id="dk-grid"></div>`;
-    }
-    busca.querySelector("#dk-filtros").innerHTML = tipos + `<span class="tenue">CMC</span>` + cmcs;
+    if (!busca.querySelector("#dk-q")) busca.innerHTML = `<input id="dk-q" type="search" class="dk-q" placeholder="${esc(t("dk.buscar"))}" autocomplete="off" spellcheck="false" value="${esc(E.q)}"><div id="dk-filtros"></div><div class="dk-grid" id="dk-grid"></div>`;
+    busca.querySelector("#dk-filtros").innerHTML = filtrosHTML();
     buscar();
-    const ns = E.res.map((o) => ({ n: o.n })); await asegurarNombres(ns);
+    await asegurarNombres(E.res.map((o) => ({ n: o.n })));
     busca.querySelector("#dk-grid").innerHTML = E.res.length ? E.res.map((o) => tileHTML(o)).join("") : `<p class="tenue">${esc(t("dk.sin_res"))}</p>`;
   };
   const pintarEdh = async () => {
@@ -413,7 +508,7 @@ async function editor(app, id) {
       } catch { E.edh = { slug, cats: [], error: true }; }
     }
     if (E.edh.error || !E.edh.cats.length) { busca.innerHTML = `<p class="tenue">${esc(t("dk.edh_no"))}</p>`; return; }
-    const todas = E.edh.cats.flatMap((c) => c.cartas.map((x) => ({ n: x.n }))); await asegurarNombres(todas);
+    await asegurarNombres(E.edh.cats.flatMap((c) => c.cartas.map((x) => ({ n: x.n }))));
     busca.innerHTML = `<p class="tenue">${(E.edh.n || 0).toLocaleString()} decks · <a href="https://edhrec.com/commanders/${esc(slug)}" target="_blank" rel="noopener">EDHREC</a></p>` +
       E.edh.cats.map((c) => `<h3 class="dkg">${esc(c.titulo)}</h3><div class="dk-grid">${c.cartas.map((x) => { const o = oraDe(x.n); return o ? tileHTML(o, `<span class="tenue">${x.p != null ? Math.round(x.p * 100) + "%" : ""}${x.s != null ? ` · ${x.s > 0 ? "+" : ""}${Math.round(x.s * 100)}` : ""}</span>`) : ""; }).join("")}</div>`).join("");
   };
@@ -422,37 +517,49 @@ async function editor(app, id) {
     if (!E.sucio || E.guardando) return;
     E.guardando = true; estado.textContent = t("dk.guardando");
     try { await cuenta.guardar(`deck:${E.deck.id}`, limpio(E.deck)); E.sucio = false; estado.textContent = t("dk.guardado"); }
-    catch (er) {
-      if (er.estado === 409) { estado.textContent = t("dk.conflicto"); }
-      else estado.textContent = t("dk.err_guardar");
-    }
+    catch (er) { estado.textContent = er.estado === 409 ? t("dk.conflicto") : t("dk.err_guardar"); }
     E.guardando = false;
-    if (E.sucio) { E.t = setTimeout(guardar, 1200); }
+    if (E.sucio) E.t = setTimeout(guardar, 1200);
   };
+  const actualizarTiles = (nombre) => busca.querySelectorAll(`.dk-tile[data-n="${CSS.escape(nombre)}"]`).forEach((tl) => {
+    const o = oraDe(nombre) || { n: nombre, sid: null }; const tmp = document.createElement("div"); tmp.innerHTML = tileHTML(o, tl.querySelector(".dk-tile-pie .tenue")?.outerHTML || ""); tl.replaceWith(tmp.firstElementChild);
+  });
   const cambiar = (n, z, dq) => {
     const o = oraDe(n), nombre = o ? o.n : n, D = E.deck;
-    if (z === "cmd" && dq > 0) { const cs = D.cartas.filter((c) => c.z === "cmd"); const par = cs.length === 1 && (o?.pareja || oraDe(cs[0].n)?.pareja); if (cs.length >= (par ? 2 : 1)) cs.forEach((c) => { c.z = "main"; }); }
+    if (z === "cmd" && dq > 0) {
+      const cs = D.cartas.filter((c) => c.z === "cmd"), par = cs.length === 1 && (o?.pareja || oraDe(cs[0].n)?.pareja);
+      if (cs.length >= (par ? 2 : 1)) cs.forEach((c) => { c.z = "main"; });
+      D.cartas = D.cartas.filter((c) => !(c.n === nombre && c.z === "main" && c.q === 1));
+    }
     let c = D.cartas.find((x) => x.n === nombre && x.z === z);
     if (!c && dq > 0) { c = { n: nombre, q: 0, z }; D.cartas.push(c); }
     if (!c) return;
     c.q = Math.max(0, Math.min(z === "cmd" ? 1 : 999, c.q + dq));
     D.cartas = D.cartas.filter((x) => x.q > 0);
     E.sucio = true; estado.textContent = t("dk.sin_guardar"); clearTimeout(E.t); E.t = setTimeout(guardar, 1000);
+    if (z === "cmd") { E.qcmd = ""; E.edh = null; }
     pintarDeck();
-    if (z === "cmd") { E.edh = null; pintarBusca(); }
-    else busca.querySelectorAll(`.dk-tile[data-n="${CSS.escape(nombre)}"] .dk-img`).forEach((b) => { const q = enDeck(nombre); let e_ = b.querySelector(".dk-en"); if (!q) e_?.remove(); else { if (!e_) { e_ = document.createElement("b"); e_.className = "dk-en"; b.appendChild(e_); } e_.textContent = q; } });
+    if (z === "cmd") { busca.innerHTML = ""; if (E.pest !== "deck") pintarBusca(); else pintarBusca(); } else actualizarTiles(nombre);
   };
-  marcarPest(); pintarDeck(); pintarBusca();
+  pintarDeck(); pintarBusca();
   app.oninput = (e) => {
     if (e.target.id === "dk-q") { E.q = e.target.value; pintarBusca(); }
+    else if (e.target.id === "dk-qcmd") { E.qcmd = e.target.value; pintarCmdRes(); }
     else if (e.target.id === "dk-nombre") { E.deck.nombre = e.target.value || "Deck"; E.sucio = true; clearTimeout(E.t); E.t = setTimeout(guardar, 1000); }
   };
-  app.onchange = (e) => { if (e.target.id === "dk-fmt") { E.deck.formato = e.target.value; E.sucio = true; E.edh = null; guardar(); pintarDeck(); pintarBusca(); } };
+  app.onchange = (e) => { if (e.target.id === "dk-fmt") { E.deck.formato = e.target.value; E.sucio = true; E.edh = null; E.cols.clear(); guardar(); pintarDeck(); busca.innerHTML = ""; pintarBusca(); } };
   app.onclick = async (e) => {
-    const p = e.target.closest("button[data-pest]"); if (p) { E.pest = p.dataset.pest; marcarPest(); if (E.pest !== "deck") { busca.innerHTML = ""; pintarBusca(); } return; }
+    const p = e.target.closest("button[data-pest]"); if (p) { E.pest = p.dataset.pest; pintarPest(); if (E.pest !== "deck") { busca.innerHTML = ""; pintarBusca(); } if (matchMedia("(max-width: 899px)").matches) app.querySelector("#dk-pest").scrollIntoView({ block: "start" }); return; }
+    const pc = e.target.closest("[data-poner-cmd]"); if (pc) { cambiar(pc.dataset.ponerCmd, "cmd", 1); return; }
+    const qc = e.target.closest("[data-quitar-cmd]"); if (qc) { cambiar(qc.dataset.quitarCmd, "cmd", -1); return; }
+    const mn = e.target.closest("[data-menos]"); if (mn) { const n = mn.closest(".dk-tile").dataset.n, c = E.deck.cartas.find((x) => x.n === (oraDe(n)?.n || n) && x.z === "main") || E.deck.cartas.find((x) => x.n === (oraDe(n)?.n || n) && x.z !== "cmd"); if (c) cambiar(c.n, c.z, -1); return; }
     const a = e.target.closest("[data-add]"); if (a) { const n = a.closest(".dk-tile").dataset.n; cambiar(n, a.dataset.add, 1); return; }
+    const x = e.target.closest(".dkl [data-x]"); if (x) { const l = x.closest(".dkl"); const c = E.deck.cartas.find((y) => y.n === l.dataset.n && y.z === l.dataset.z); if (c) cambiar(c.n, c.z, -c.q); return; }
     const q = e.target.closest(".dkl [data-q]"); if (q) { const l = q.closest(".dkl"); cambiar(l.dataset.n, l.dataset.z, Number(q.dataset.q)); return; }
+    const col = e.target.closest("[data-col]"); if (col) { if (esCmd(E.deck.formato) && identidad(E.deck) != null) return; const v = col.dataset.col; E.cols.has(v) ? E.cols.delete(v) : E.cols.add(v); pintarBusca(); return; }
     const tp = e.target.closest("[data-tp]"); if (tp) { const v = tp.dataset.tp; E.tipos.has(v) ? E.tipos.delete(v) : E.tipos.add(v); pintarBusca(); return; }
+    const rz = e.target.closest("[data-rar]"); if (rz) { const v = rz.dataset.rar; E.rar.has(v) ? E.rar.delete(v) : E.rar.add(v); pintarBusca(); return; }
+    if (e.target.closest("[data-limpiar]")) { E.tipos.clear(); E.rar.clear(); E.cmc = null; E.cols.clear(); pintarBusca(); return; }
     const cm = e.target.closest("[data-cmc]"); if (cm) { const v = Number(cm.dataset.cmc); E.cmc = E.cmc === v ? null : v; pintarBusca(); return; }
     const tk = e.target.closest("[data-tienda]"); if (tk) { E.tienda = tk.dataset.tienda; pintarDeck(); return; }
     if (e.target.closest("[data-faltan]")) { const P = preciosDeck(E.deck.cartas, tengo); msg.textContent = (await copiar(P.faltan.map(([n, q_]) => `${q_} ${n}`).join("\n"))) ? t("meta.copiada") : t("meta.no_copiada"); return; }
@@ -471,8 +578,8 @@ async function editor(app, id) {
         msg.innerHTML = `${esc(t("dk.codigo", { c: r.codigo }))} <button type="button" class="enlace" data-copiar-txt="${esc(enlace)}">${esc(t("lote.copiar_enlace"))}</button>`;
       } catch { msg.textContent = t("lote.err.codigo"); }
     } else if (ac.dataset.acc === "importar") {
+      E.pest = "buscar"; pintarPest();
       busca.innerHTML = `<textarea id="dk-imp" class="dk-imp" placeholder="1 Sol Ring&#10;..."></textarea><div class="acciones-deck"><button type="button" class="primario" data-imp>${esc(t("dk.importar"))}</button></div>`;
-      E.pest = "buscar"; marcarPest();
     }
   };
   app.addEventListener("click", async (e) => {
@@ -488,7 +595,7 @@ async function editor(app, id) {
         const ya = E.deck.cartas.find((x) => x.n === (o ? o.n : nombre) && x.z === z);
         if (ya) ya.q += q; else E.deck.cartas.push({ n: o ? o.n : nombre, q, z }); n++;
       }
-      E.sucio = true; await asegurarNombres(E.deck.cartas); await guardar(); busca.innerHTML = ""; pintarBusca(); pintarDeck(); msg.textContent = t("dk.importadas", { n });
+      E.sucio = true; await asegurarNombres(E.deck.cartas); await guardar(); busca.innerHTML = ""; E.pest = "deck"; pintarDeck(); pintarBusca(); msg.textContent = t("dk.importadas", { n });
     }
   });
 }
