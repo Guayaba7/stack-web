@@ -299,7 +299,10 @@ const FONDOS_092 = (() => {
       draw(x, W, H, t) {
         const g = x.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#12052a"); g.addColorStop(.55, "#6b1a5c"); g.addColorStop(.75, "#ff6f61"); g.addColorStop(1, "#2a0a2a"); x.fillStyle = g; x.fillRect(0, 0, W, H);
         const r = H * .26, sy = H * .6 + Math.sin(t * .2) * 10, sg = x.createLinearGradient(0, sy - r, 0, sy + r); sg.addColorStop(0, "#ffe66b"); sg.addColorStop(1, "#ff3d8a"); x.fillStyle = sg; x.beginPath(); x.arc(W * .5, sy, r, 0, TAU); x.fill();
-        x.fillStyle = "#3a0c3e"; for (let k = 0; k < 8; k++) { const yy = sy + r * .08 + k * k * (r / 30) + ((t * 10) % (r / 8)); x.fillRect(W * .5 - r, yy, r * 2, 2 + k); }
+        x.save(); x.beginPath(); x.arc(W * .5, sy, r, 0, TAU); x.clip(); x.fillStyle = "#3a0c3e";   // rayas recortadas al sol; bajan sin brincos
+        const N = 9, fa = (t * .05) % 1, y0 = sy - r * .3, alto = r * 1.3;
+        for (let k = 0; k < N; k++) { const u = (k + fa) / N, yy = y0 + u * alto, g2 = 1.5 + u * r * .13; x.globalAlpha = Math.min(1, u * 6); x.fillRect(W * .5 - r, yy - g2 / 2, r * 2, g2); }
+        x.restore();
         x.fillStyle = "#1a0620"; x.beginPath(); x.moveTo(0, H); for (let i = 0; i <= W; i += 12) x.lineTo(i, H * .78 - Math.abs(Math.sin(i * .006)) * H * .12 - Math.abs(Math.sin(i * .017)) * H * .05); x.lineTo(W, H); x.fill();
         x.strokeStyle = "#0b0310"; x.lineWidth = 4;
         for (const px of [W * .1, W * .88]) { const top = H * .5; x.beginPath(); x.moveTo(px, H); x.quadraticCurveTo(px + 10, H * .7, px + 18, top); x.stroke();
