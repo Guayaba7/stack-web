@@ -157,3 +157,5 @@ body[data-tema="PERG"]{--bg:#efe4cc;--panel:#e6d7b8;--line:#c2ab80;--txt:#3b2a16
   --foil:#2c5f8a;--etched:#6a3f8a;--har:#9a3a5a;--grid:#e0cfa8;--sel2:#e4d4b0;--selline:#a8743c;--edit:#f5ecd8;--bueno:#2f7a3a;--malo:#a8261f;--ani:#7a2e0c;
   background-image:radial-gradient(circle at 20% 30%,rgba(120,80,30,.07),transparent 40%),radial-gradient(circle at 80% 70%,rgba(120,80,30,.09),transparent 45%)}
 body[data-tema="PERG"]{color-scheme:light}
+body[data-tema="PERG"],body[data-tema="PERG"] *{font-family:"Palatino Linotype","Book Antiqua",Palatino,Georgia,serif;font-variant-numeric:lining-nums tabular-nums}
+body[data-tema="PERG"] h1,body[data-tema="PERG"] h2,body[data-tema="PERG"] .marca{font-variant:small-caps;letter-spacing:.06em}

@@ -205,6 +205,11 @@ const tend = (v) => (v == null ? `<span class="tenue">—</span>` : `<span class
 
 // ---- carta firma de un arquetipo (como MTGGoldfish): la clave de MTGGoldfish si la hay; si no, la carta mas propia del arquetipo
 const artCarta = (sid) => (sid ? `https://cards.scryfall.io/art_crop/front/${sid[0]}/${sid[1]}/${sid}.jpg` : "");
+function coloresDeck(d) {                        // colores de las cartas (sin tierras) del main y comandante, como la app
+  const col = new Set();
+  for (const c of d.cartas) { if (c.z !== "main" && c.z !== "cmd") continue; const o = oraDe(c.n); if (!o || o.tipo.split(" // ")[0].includes("Land")) continue; for (const x of o.col || "") col.add(x); }
+  return [..."WUBRG"].filter((c) => col.has(c)).join("");
+}
 function firmaArq(F, a, fmt, R) {
   M.firmas = M.firmas || new Map();
   const k = fmt + "|" + a.nombre; if (M.firmas.has(k)) return M.firmas.get(k);
@@ -213,7 +218,7 @@ function firmaArq(F, a, fmt, R) {
   const cuenta = new Map(), col = new Set();
   for (const main of listas) for (const [nom] of main) {
     const o = oraDe(nom); if (!o || o.tipo.split(" // ")[0].includes("Land")) continue;
-    cuenta.set(o.n, (cuenta.get(o.n) || 0) + 1); for (const c of o.id || "") col.add(c);
+    cuenta.set(o.n, (cuenta.get(o.n) || 0) + 1); for (const c of o.col || "") col.add(c);
   }
   let n = null;
   for (const c of a.claves || []) { const o = oraDe(c); if (o) { n = o.n; break; } }
@@ -275,7 +280,8 @@ export async function vistaMeta(app, fmtRuta) {
         else if (i === 12) h += `<h3 class="meta-tier">${esc(t("meta.mas_cmd"))}</h3>`;
         let arte, col, l1;
         if (x.tipo === "cmd") { const o = oraDe(x.nombre); arte = o?.sid; col = o?.id || ""; l1 = `<span>#${x.rango} · <b>${(x.n_decks || 0).toLocaleString()}</b> decks</span>${tend(x.tendencia == null ? null : Math.max(-9.9, Math.min(9.9, x.tendencia / 3)))}`; }
-        else { const fz = firmaArq(F, x, fmt, R), o = oraDe(fz.n); arte = o?.sid; col = x.colores || fz.col; x._firma = fz.n;
+        else { const fz = firmaArq(F, x, fmt, R), o = oraDe(fz.n); arte = o?.sid; x._firma = fz.n;
+          col = d ? coloresDeck(d) : x.colores || fz.col;               // los mismos colores que la lista del deck que se muestra
           l1 = `<span>META <b>${x.n ? x.pct.toFixed(1) + "%" : "—"}</b>${x.n ? ` <i class="tenue">(${x.n})</i>` : ""}</span>${tend(x.tend)}`; }
         const l2 = `<span>${TIENDAS.find((z) => z[0] === M.tienda)[1]} <b class="num">${P ? pesos2(P.tiendas[M.tienda].total) : "—"}</b></span>${P && tengo ? `<span>${esc(t("dk.falta_corto"))} <b class="num ${P.falta ? "" : "sube"}">${P.falta ? pesos2(P.falta) : "✓"}</b></span>` : ""}`;
         h += `<button type="button" class="meta-tar${M.sel === i ? " activo" : ""}" data-i="${i}"><span class="meta-arte"${arte ? ` style="background-image:url('${artCarta(arte)}')"` : ""}>` +
