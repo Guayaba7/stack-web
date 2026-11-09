@@ -1,7 +1,7 @@
 // Temas de Stack en la web. El tema se elige en la app (perk de la app) y viaja cifrado en la cuenta; aqui solo se APLICA.
 // Lo que sigue esta copiado de la app (S-0.6.7-BETA) para que se vea y se mueva igual: colores del tema personalizado
 // (PER) y fondos animados de pantalla completa (GALAXY, PLASMA, CONTOUR, GRID).
-export const PALETAS = ["GRN", "VLT", "GRY", "RED", "RNB", "NVD", "HLW", "SNV", "ALG", "SOL", "DREAM", "PLASMA", "GRID", "CONTOUR", "GALAXY", "PER"];
+export const PALETAS = ["GRN", "VLT", "GRY", "RED", "RNB", "NVD", "HLW", "SNV", "ALG", "SOL", "DREAM", "PLASMA", "GRID", "CONTOUR", "GALAXY", "CRT", "PER"];
 const CLARO = { ALG: "#fff4fa", DREAM: "#fcf6fb" };
 let cfg = { tema_personal: null };
 

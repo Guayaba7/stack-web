@@ -105,3 +105,17 @@ body[data-tema="PLASMA"] main,body[data-tema="GRID"] main,body[data-tema="CONTOU
 /* apagar animaciones: opcion de la app o 'reducir movimiento' del sistema */
 body[data-anim="NO"],body[data-anim="NO"] *{animation:none!important}
 @media (prefers-reduced-motion: reduce){body,body *{animation:none!important}}
+/* CRT (0.9.1): monitor viejo de fosforo verde. Lineas de barrido, vineta, un brillo que baja despacio y un parpadeo leve. */
+body[data-tema="CRT"]{--bg:#020b05;--panel:#03110a;--line:#0f4a26;--txt:#8dffae;--dim:#3fa565;--acc:#39ff7a;--amb:#d6ff6b;--sel:#0b3a1d;--err:#ff6b5b;
+  --hi:#d9ffe4;--foil:#9fffd0;--etched:#c6ff9f;--har:#ffd36b;--grid:#0a2c17;--sel2:#06240f;--selline:#2bd862;--edit:#04170b;--bueno:#39ff7a;--malo:#ff6b5b;--ani:#39ff7a}
+body[data-tema="CRT"] main,body[data-tema="CRT"] header{text-shadow:0 0 4px rgba(57,255,122,.5)}
+body[data-tema="CRT"]::before{content:"";position:fixed;inset:0;z-index:90;pointer-events:none;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,.26) 0 1px,transparent 1px 3px),radial-gradient(ellipse at center,transparent 58%,rgba(0,0,0,.55) 100%);
+  animation:crt-parpadeo 5s steps(1) infinite}
+body[data-tema="CRT"]::after{content:"";position:fixed;left:0;right:0;top:-18%;height:18%;z-index:91;pointer-events:none;
+  background:linear-gradient(transparent,rgba(140,255,170,.07),transparent);animation:crt-barrido 8s linear infinite}
+@keyframes crt-barrido{to{transform:translateY(680%)}}
+@keyframes crt-parpadeo{0%,100%{opacity:1}46%{opacity:.86}47%{opacity:1}72%{opacity:.93}73%{opacity:1}}
+body[data-anim="NO"]::before,body[data-anim="NO"]::after{animation:none!important}
+body[data-anim="NO"][data-tema="CRT"]::after{display:none}
+@media (prefers-reduced-motion: reduce){body::before,body::after{animation:none!important} body[data-tema="CRT"]::after{display:none}}
