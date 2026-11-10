@@ -1,7 +1,7 @@
 // Temas de Stack en la web. El tema se elige en la app (perk de la app) y viaja cifrado en la cuenta; aqui solo se APLICA.
 // Lo que sigue esta copiado de la app (S-0.6.7-BETA) para que se vea y se mueva igual: colores del tema personalizado
 // (PER) y fondos animados de pantalla completa (GALAXY, PLASMA, CONTOUR, GRID).
-export const PALETAS = ["GRN", "VLT", "GRY", "RED", "RNB", "NVD", "HLW", "SNV", "ALG", "SOL", "DREAM", "PLASMA", "GRID", "CONTOUR", "GALAXY", "CRT", "FLUJO", "CIRCUITO", "LAVA", "CONSTELACION", "BRASAS", "ALBERCA", "LLUVIA", "RETRO", "MANA", "PERG", "PER"];
+export const PALETAS = ["GRN", "VLT", "GRY", "RED", "RNB", "NVD", "HLW", "SNV", "ALG", "SOL", "DREAM", "PLASMA", "GRID", "CONTOUR", "GALAXY", "CRT", "FLUJO", "CIRCUITO", "LAVA", "CONSTELACION", "BRASAS", "ALBERCA", "LLUVIA", "RETRO", "MANA", "AGUJERO", "SEIGAIHA", "PERG", "PER"];
 const CLARO = { ALG: "#fff4fa", DREAM: "#fcf6fb", PERG: "#efe4cc" };
 let cfg = { tema_personal: null };
 
@@ -214,6 +214,70 @@ const FONDOS_092 = (() => {
   const R = (a, b) => a + Math.random() * (b - a), TAU = Math.PI * 2;
   const hsl3 = (h, s, l) => { const k = n => (n + h / 30) % 12, a = s * Math.min(l, 1 - l), f = n => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1)); return [f(0) * 255, f(8) * 255, f(4) * 255]; };
   const cuantos = (W, H, por, min, max) => Math.max(min, Math.min(max, Math.round(W * H / por)));
+  // agujero negro: cada pixel sigue un rayo de luz que se curva (Schwarzschild aproximado); el disco brilla mas del lado que viene hacia ti
+  const FRAG_AGUJERO = `precision highp float;
+uniform vec2 res; uniform float t; uniform float fl;
+float h21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+float ruido(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(h21(i), h21(i + vec2(1, 0)), f.x), mix(h21(i + vec2(0, 1)), h21(i + vec2(1, 1)), f.x), f.y); }
+float fbm(vec2 p){ float s = 0.0, a = .5; for (int i = 0; i < 5; i++) { s += a * ruido(p); p = p * 2.03 + 7.1; a *= .5; } return s; }
+vec3 estrellas(vec3 d){ vec2 uv = vec2(atan(d.z, d.x), asin(clamp(d.y, -1.0, 1.0))) * 60.0; vec2 c = floor(uv), f = fract(uv) - .5;
+  float h = h21(c), b = step(.965, h) * smoothstep(.12, .0, length(f)) * (h - .965) * 28.0;
+  float neb = fbm(uv * .05) * .07; return vec3(b) * mix(vec3(.8, .85, 1.0), vec3(1.0, .85, .7), h21(c + 3.0)) + vec3(neb * .5, neb * .35, neb * .9); }
+void main(){
+  vec2 uv = (gl_FragCoord.xy - .5 * res) / res.y; uv.x -= .28 * res.x / res.y * .5;
+  vec3 cam = vec3(0.0, 1.6, -19.0), fw = normalize(-cam), rt = normalize(cross(vec3(0, 1, 0), fw)), up = cross(fw, rt);
+  float roll = .12; vec2 ur = vec2(uv.x * cos(roll) - uv.y * sin(roll), uv.x * sin(roll) + uv.y * cos(roll));
+  vec3 v = normalize(fw * 1.35 + rt * ur.x + up * ur.y), p = cam; vec3 hv = cross(p, v); float h2 = dot(hv, hv);
+  vec3 col = vec3(0.0); float a = 0.0; bool cae = false;
+  for (int i = 0; i < 220; i++) {
+    float r2 = dot(p, p), r = sqrt(r2); if (r < 1.0) { cae = true; break; } if (r > 32.0 && dot(p, v) > 0.0) break;
+    float dt = clamp(.07 * r, .03, .9); vec3 q0 = p;
+    v += -1.5 * h2 * p / (r2 * r2 * r) * dt; p += v * dt;
+    if (q0.y * p.y < 0.0) {
+      vec3 q = mix(q0, p, q0.y / (q0.y - p.y)); float rr = length(q.xz);
+      if (rr > 2.6 && rr < 13.0) {
+        float w = 2.2 / pow(rr, 1.5), ang = atan(q.z, q.x) + t * w * 1.6;
+        vec2 pp = vec2(cos(ang), sin(ang)) * rr;
+        float n = fbm(pp * 1.25 + vec2(0.0, rr * .6)) * .7 + fbm(vec2(rr * 3.2, ang * 2.0)) * .5;
+        float caliente = 1.0 - smoothstep(2.6, 13.0, rr);
+        vec3 tg = normalize(vec3(-q.z, 0.0, q.x)); float D = 1.0 + .55 * dot(tg, normalize(-v)), beam = D * D * D;
+        float bordes = smoothstep(2.6, 3.4, rr) * (1.0 - smoothstep(9.0, 13.0, rr));
+        vec3 c = mix(vec3(1.0, .32, .07), vec3(1.0, .86, .62), caliente * caliente) * (.35 + 1.6 * caliente) * (.35 + n) * beam * (1.0 + fl * .9);
+        float al = clamp(bordes * (.45 + .5 * n), 0.0, 1.0);
+        col += (1.0 - a) * c * al; a += (1.0 - a) * al; if (a > .985) break;
+      }
+    }
+  }
+  if (!cae) col += (1.0 - a) * estrellas(normalize(v));
+  col = 1.0 - exp(-col * 1.25); col = pow(col, vec3(.9));
+  gl_FragColor = vec4(col, 1.0);
+}`;
+  // teja de seigaiha (2 filas de escamas); clara = version iluminada por la franja de luz
+  const tejaSeigaiha = clara => {
+    const r = 26, cv = document.createElement("canvas"); cv.width = r * 2; cv.height = r; const x = cv.getContext("2d");
+    const F = clara ? ["#7a2a20", "#4a1410", "#62201a", "#4a1410", "#7a2a20"] : ["#4a1611", "#2a0907", "#3a100c", "#2a0907", "#4a1611"], L = clara ? "#c0705e" : "#7a2a20";
+    x.fillStyle = F[1]; x.fillRect(0, 0, r * 2, r);
+    for (let j = 0; j <= 8; j++) { const cy = j * r / 2, off = j % 2 ? r : 0;
+      for (let cx = -2 * r + off; cx <= 4 * r; cx += 2 * r) for (let k = 5; k >= 1; k--) {
+        x.fillStyle = F[5 - k]; x.strokeStyle = L; x.lineWidth = k === 5 ? 2.6 : 1.6; x.beginPath(); x.arc(cx, cy, r * k / 5 - (k === 5 ? 1.3 : 0), Math.PI, 0); x.closePath(); x.fill(); x.stroke(); } }
+    return {cv, p: null};
+  };
+  // agujero negro: un solo lienzo WebGL que se reutiliza (Chrome limita cuantos contextos WebGL puede haber)
+  let GL_AN = null;
+  const glAgujero = (w, h) => {
+    try {
+      if (!GL_AN) {
+        const cv = document.createElement("canvas"), g = cv.getContext("webgl", {premultipliedAlpha: false, antialias: false}); if (!g) return null;
+        const sh = (tp, src) => { const s = g.createShader(tp); g.shaderSource(s, src); g.compileShader(s); if (!g.getShaderParameter(s, g.COMPILE_STATUS)) throw new Error(g.getShaderInfoLog(s)); return s; };
+        const pr = g.createProgram(); g.attachShader(pr, sh(g.VERTEX_SHADER, "attribute vec2 p;void main(){gl_Position=vec4(p,0,1);}")); g.attachShader(pr, sh(g.FRAGMENT_SHADER, FRAG_AGUJERO)); g.linkProgram(pr); g.useProgram(pr);
+        const b = g.createBuffer(); g.bindBuffer(g.ARRAY_BUFFER, b); g.bufferData(g.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), g.STATIC_DRAW);
+        const l = g.getAttribLocation(pr, "p"); g.enableVertexAttribArray(l); g.vertexAttribPointer(l, 2, g.FLOAT, false, 0, 0);
+        GL_AN = {cv, g, res: g.getUniformLocation(pr, "res"), t: g.getUniformLocation(pr, "t"), fl: g.getUniformLocation(pr, "fl")};
+      }
+      GL_AN.cv.width = w; GL_AN.cv.height = h; return GL_AN;
+    } catch (e) { console.warn("agujero negro sin WebGL:", e); return null; }
+  };
   const D = {
     FLUJO: {                                         // particulas que siguen corrientes y dejan trazos de colores
       init(W, H) { return {p: Array.from({length: cuantos(W, H, 220, 300, 2200)}, () => [R(0, W), R(0, H)])}; },
@@ -322,6 +386,27 @@ const FONDOS_092 = (() => {
         x.globalCompositeOperation = "source-over";
       },
       ui(t, E) { const c = E.c.map(Math.round).join(","); return {acc: `rgb(${c})`, ani: `rgb(${c})`, sel: `rgba(${c},.22)`, line: `rgba(${c},.36)`, selline: `rgba(${c},.6)`, sel2: `rgba(${c},.12)`}; }},
+    AGUJERO: {                                       // agujero negro con trazado de rayos en la tarjeta de video (WebGL)
+      init(W, H) { const k = .5, G = glAgujero(Math.max(8, Math.round(W * k)), Math.max(8, Math.round(H * k))); return {G, f: 0, prox: 3}; },
+      draw(x, W, H, t, E, dt) {
+        E.prox -= dt; if (E.prox < 0) { E.f = 1; E.prox = R(5, 8); } E.f *= Math.exp(-dt * 1.4);
+        const G = E.G;
+        if (!G) { const g = x.createRadialGradient(W * .64, H * .5, H * .1, W * .64, H * .5, H * .5); g.addColorStop(0, "#000"); g.addColorStop(.3, "#ff9e5a"); g.addColorStop(1, "#030203"); x.fillStyle = g; x.fillRect(0, 0, W, H); return; }
+        const g = G.g; g.viewport(0, 0, G.cv.width, G.cv.height); g.uniform2f(G.res, G.cv.width, G.cv.height); g.uniform1f(G.t, t); g.uniform1f(G.fl, E.f); g.drawArrays(g.TRIANGLES, 0, 3);
+        x.imageSmoothingEnabled = true; x.drawImage(G.cv, 0, 0, W, H);
+      },
+      ui(t, E) { const f = E.f, c = [255, 158 + 87 * f, 90 + 140 * f].map(Math.round).join(","); return {acc: `rgb(${c})`, ani: `rgb(${c})`, line: `rgba(${c},${.26 + .3 * f})`, selline: `rgba(${c},.7)`}; }},
+    SEIGAIHA: {                                      // olas japonesas (seigaiha) en tonos vino; una franja de luz cruza en diagonal
+      init(W, H) { return {A: tejaSeigaiha(false), B: tejaSeigaiha(true), tmp: document.createElement("canvas"), L: 0}; },
+      draw(x, W, H, t, E) {
+        const m = new DOMMatrix([1, 0, 0, 1, (t * 9) % 52, 0]); E.A.p = E.A.p || x.createPattern(E.A.cv, "repeat"); E.B.p = E.B.p || x.createPattern(E.B.cv, "repeat");
+        E.A.p.setTransform(m); E.B.p.setTransform(m); x.fillStyle = E.A.p; x.fillRect(0, 0, W, H);
+        const pos = ((t * .1) % 1.6 - .3) * (W + H), c = E.tmp; if (c.width !== W || c.height !== H) { c.width = W; c.height = H; } const y = c.getContext("2d");
+        y.globalCompositeOperation = "source-over"; y.clearRect(0, 0, W, H); y.fillStyle = E.B.p; y.fillRect(0, 0, W, H); y.globalCompositeOperation = "destination-in";
+        const k = pos / 2, g = y.createLinearGradient(k - 160, k - 160, k + 160, k + 160); g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(.5, "rgba(0,0,0,1)"); g.addColorStop(1, "rgba(0,0,0,0)"); y.fillStyle = g; y.fillRect(0, 0, W, H);
+        x.drawImage(c, 0, 0); E.L = Math.pow(Math.max(0, 1 - Math.abs(W * .3 + H * .5 - pos) / 320), 2);
+      },
+      ui(t, E) { const L = E.L, c = [255, 138 + 70 * L, 118 + 70 * L].map(Math.round).join(","); return {acc: `rgb(${c})`, ani: `rgb(${c})`, selline: `rgb(${c})`, line: `rgba(240,160,140,${.28 + .3 * L})`}; }},
   };
   void hsl3;
   // adaptador al motor de fondos de Stack (FONDOS: iniciar / medir / dibujar)

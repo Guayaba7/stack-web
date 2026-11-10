@@ -159,3 +159,10 @@ body[data-tema="PERG"]{--bg:#efe4cc;--panel:#e6d7b8;--line:#c2ab80;--txt:#3b2a16
 body[data-tema="PERG"]{color-scheme:light}
 body[data-tema="PERG"],body[data-tema="PERG"] *{font-family:"Palatino Linotype","Book Antiqua",Palatino,Georgia,serif;font-variant-numeric:lining-nums tabular-nums}
 body[data-tema="PERG"] h1,body[data-tema="PERG"] h2,body[data-tema="PERG"] .marca{font-variant:small-caps;letter-spacing:.06em}
+
+/* ---- temas de 0.9.4 (los mismos de la app) */
+body[data-tema="AGUJERO"]{--bg:#030203;--panel:rgba(12,8,7,.84);--line:rgba(255,170,110,.3);--txt:#f6e8e0;--dim:#a8928a;--acc:#ff9e5a;--amb:#ffd27a;--sel:rgba(180,90,40,.32);--err:#ff6b6b;--hi:#fff;
+  --foil:#ffd9a8;--etched:#ffc35a;--har:#ffb38a;--grid:rgba(140,80,40,.22);--sel2:rgba(120,60,25,.26);--selline:#ff9e5a;--edit:rgba(10,6,5,.8);--bueno:#7ee0a1;--malo:#ff6b6b;--ani:#ff9e5a}
+body[data-tema="SEIGAIHA"]{--bg:#1c0706;--panel:rgba(32,9,8,.86);--line:rgba(240,160,140,.3);--txt:#fbe9e2;--dim:#c08f84;--acc:#ff8a76;--amb:#ffc48a;--sel:rgba(180,60,45,.36);--err:#ff6b6b;--hi:#fff;
+  --foil:#ffd0c4;--etched:#ffc48a;--har:#ffb3a8;--grid:rgba(160,60,45,.22);--sel2:rgba(140,40,30,.28);--selline:#ff8a76;--edit:rgba(28,8,7,.8);--bueno:#7ee0a1;--malo:#ff6b6b;--ani:#ff8a76}
+body[data-tema="SEIGAIHA"] main{background:color-mix(in srgb,var(--bg) 84%,transparent)}

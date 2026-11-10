@@ -11,6 +11,7 @@ import * as escaner from "./escaner.js";
 import * as scry from "./scryfall.js";
 import * as cv from "./cuenta_vistas.js";
 import * as meta from "./meta.js";
+import { vistaApp } from "./descarga.js";
 import { nuevoTog, togActivo, alternarTog, pasaFila, barraToggles } from "./filtros.js";
 
 const app = document.getElementById("app");
@@ -299,6 +300,7 @@ async function pintarDetalles(sid, k) {
 function leerRuta() {
   const h = location.hash.replace(/^#/, "") || "/";
   if (h.startsWith("/c/")) return { pantalla: "ficha", k: decodeURIComponent(h.slice(3)) };
+  if (h.startsWith("/escaner/deck/")) return { pantalla: "escaner", deck: decodeURIComponent(h.slice(14)) };
   if (h.startsWith("/escaner")) return { pantalla: "escaner" };
   if (h.startsWith("/cuenta")) return { pantalla: "cuenta" };
   if (h.startsWith("/inv/")) return { pantalla: "inventario", id: decodeURIComponent(h.slice(5)) };
@@ -310,6 +312,7 @@ function leerRuta() {
   if (h.startsWith("/articulos")) return { pantalla: "articulos" };
   if (h.startsWith("/a/")) return { pantalla: "articulo", slug: decodeURIComponent(h.slice(3)) };
   if (h.startsWith("/terminos")) return { pantalla: "terminos" };
+  if (h === "/app" || h.startsWith("/app/")) return { pantalla: "app" };
   if (h.startsWith("/meta")) return { pantalla: "meta", fmt: decodeURIComponent(h.split("/")[2] || "") };
   if (h.startsWith("/decks")) return { pantalla: "decks", id: decodeURIComponent(h.split("/")[2] || "") };
   const q = new URLSearchParams(h.split("?")[1] || "").get("q") || "";
@@ -420,6 +423,7 @@ function pantallaCuenta(r) {
   else if (r.pantalla === "articulo") art.vistaArticulo(app, r.slug);
   else if (r.pantalla === "meta") meta.vistaMeta(app, r.fmt);
   else if (r.pantalla === "decks") meta.vistaDecks(app, r.id);
+  else if (r.pantalla === "app") vistaApp(app);
   else return false;
   return true;
 }
@@ -430,7 +434,7 @@ window.addEventListener("hashchange", (ev) => {
   document.title = "Stack";
   const r = leerRuta();
   if (r.pantalla !== "escaner") salirEscaner();
-  if (r.pantalla === "escaner") vistaEscaner();
+  if (r.pantalla === "escaner") vistaEscaner(r.deck);
   else if (pantallaCuenta(r)) { /* listo */ }
   else if (r.pantalla === "ficha" || !document.getElementById("q")) {
     if (r.pantalla === "inicio") pintarInicio(r.q); else vistaFicha(r.k);
@@ -444,14 +448,16 @@ window.addEventListener("hashchange", (ev) => {
 let escanerAbierto = false;
 const LOTE_LLAVE = "stack.lote";
 const ACAB_INV = { n: "nonfoil", f: "foil", e: "etched" };
+let destinoDeck = null;               // {id, nombre}: el escaner se abrio desde un deck (#/escaner/deck/ID): lo escaneado va a ese deck
+const llaveLote = () => (destinoDeck ? `${LOTE_LLAVE}.deck.${destinoDeck.id}` : LOTE_LLAVE);   // cada deck con su propio lote
 let lote = leerLote();                // [{k, nombre, set, num, acab, idioma, q}]
 let enPanel = null;                   // {id, k}: la carta del panel y la entrada del lote que le toca
 
 function leerLote() {
-  try { const v = JSON.parse(localStorage.getItem(LOTE_LLAVE) || "[]"); return Array.isArray(v) ? v.filter((x) => x && x.k && x.q > 0) : []; }
+  try { const v = JSON.parse(localStorage.getItem(llaveLote()) || "[]"); return Array.isArray(v) ? v.filter((x) => x && x.k && x.q > 0) : []; }
   catch { return []; }
 }
-function guardarLote() { try { localStorage.setItem(LOTE_LLAVE, JSON.stringify(lote)); } catch { /* sin almacenamiento: vive mientras la pagina este abierta */ } }
+function guardarLote() { try { localStorage.setItem(llaveLote(), JSON.stringify(lote)); } catch { /* sin almacenamiento: vive mientras la pagina este abierta */ } }
 function sumarAlLote(fila, nombre, n = 1) {
   const e = lote.find((x) => x.k === fila[0]);
   if (e) e.q += n;
@@ -478,6 +484,7 @@ function salirEscaner() {
   enPanel = null;
   document.body.classList.remove("en-escaner");
   document.getElementById("escaner")?.remove();
+  if (destinoDeck) { destinoDeck = null; lote = leerLote(); }   // de vuelta al lote normal
 }
 
 function precioRapido(fila) {
@@ -491,7 +498,7 @@ function pintarBarraLote() {
   const tot = totalLote();
   cont.classList.toggle("con-lote", lote.length > 0);
   barra.hidden = !lote.length;
-  barra.innerHTML = `<button type="button" class="lote-resumen" data-lote="ver"><span class="tenue">${esc(t("lote.titulo"))}</span>
+  barra.innerHTML = `<button type="button" class="lote-resumen" data-lote="ver"><span class="tenue">${esc(destinoDeck ? t("lote.titulo_deck", { deck: destinoDeck.nombre || "Deck" }) : t("lote.titulo"))}</span>
       <b class="num">${esc(nCartas(tot.piezas))} · ${pesos(tot.mxn)}</b></button>
     <button type="button" class="primario lote-terminar" data-lote="terminar">${esc(t("lote.terminar"))}</button>`;
 }
@@ -639,6 +646,8 @@ async function pintarTerminar(hoja, aviso = "") {
   hoja.innerHTML = `<div class="hoja-cuerpo">${cabezaHoja(t("lote.terminar_titulo"))}
     <p class="lote-total num"><span>${esc(nCartas(tot.piezas))}</span><b>${pesos(tot.mxn)}</b></p>
     ${aviso}
+    ${destinoDeck ? `<section class="aj-grupo"><h3 class="aj-tit">${esc(t("lote.a_deck", { deck: destinoDeck.nombre || "Deck" }))}</h3>
+      <button type="button" class="primario ancho" data-hoja="deck">${esc(t("lote.anadir_deck", { n: tot.piezas }))}</button><p class="tenue" id="lote-deck-msg" role="status"></p></section>` : ""}
     <section class="aj-grupo"><h3 class="aj-tit">${esc(t("lote.a_inventario"))}</h3><div id="lote-inv">${conCuenta ? `<div class="cargando"></div>`
       : `<p class="tenue">${esc(t("lote.entra"))}</p><a class="boton-vacio" href="#/cuenta">${esc(t("cuenta.entrar"))}</a>`}</div></section>
     <section class="aj-grupo"><h3 class="aj-tit">${esc(t("lote.compartir"))}</h3><div id="lote-cod">
@@ -665,6 +674,16 @@ async function accionHoja(hoja, accion, boton) {
   if (accion === "vaciar") {
     if (boton.dataset.seguro !== "1") { boton.dataset.seguro = "1"; boton.textContent = t("lote.vaciar_seguro"); return; }
     lote = []; guardarLote(); enPanel = null; cerrarHoja(); return;
+  }
+  if (accion === "deck" && destinoDeck) {
+    const msg = hoja.querySelector("#lote-deck-msg"), id = destinoDeck.id;
+    boton.disabled = true; msg.className = "tenue"; msg.textContent = t("inv.agregando");
+    try {
+      await meta.agregarAlDeck(id, lote.map((e) => ({ n: e.nombre, sid: e.k.split(":")[0], acab: ACAB_INV[e.acab] || "nonfoil", q: e.q })));
+      lote = []; guardarLote(); enPanel = null;
+      location.hash = `#/decks/${encodeURIComponent(id)}`;
+    } catch (e) { boton.disabled = false; msg.className = "error"; msg.textContent = cv.mensajeCuenta(e); }
+    return;
   }
   if (accion === "inventario") {
     const msg = hoja.querySelector("#lote-inv-msg"), sel = hoja.querySelector("#lote-destino");
@@ -706,16 +725,19 @@ async function accionHoja(hoja, accion, boton) {
   }
 }
 
-async function vistaEscaner() {
+async function vistaEscaner(deckId) {
   if (escanerAbierto) return;
   escanerAbierto = true;
   enPanel = null;
+  destinoDeck = deckId ? { id: deckId, nombre: "" } : null;
+  lote = leerLote();
+  if (destinoDeck) meta.nombreDeck(deckId).then((n) => { if (destinoDeck && destinoDeck.id === deckId) { destinoDeck.nombre = n || ""; pintarBarraLote(); } }).catch(() => {});
   document.body.classList.add("en-escaner");
   const cont = document.createElement("section");
   cont.id = "escaner";
   cont.innerHTML = `<video playsinline muted autoplay></video>
     <div class="guia-capa"><div class="guia"></div></div>
-    <a class="esc-cerrar" href="#/" data-atras aria-label="${esc(t("ajustes.cerrar"))}">✕</a>
+    <a class="esc-cerrar" href="${destinoDeck ? `#/decks/${esc(encodeURIComponent(destinoDeck.id))}` : "#/"}" data-atras aria-label="${esc(t("ajustes.cerrar"))}">✕</a>
     <div class="esc-estado" id="esc-estado">${esc(t("escaner.preparando"))}</div>
     <div class="esc-panel" id="esc-panel" hidden></div>
     <div class="esc-lote" id="esc-lote" hidden></div>
@@ -848,7 +870,7 @@ async function iniciar() {
     await cv.iniciarCuenta();                     // tema de la cuenta (si hay sesion) antes de pintar
     const r = leerRuta();
     if (r.pantalla === "ficha") vistaFicha(r.k);
-    else if (r.pantalla === "escaner") { pintarInicio(""); vistaEscaner(); }
+    else if (r.pantalla === "escaner") { pintarInicio(""); vistaEscaner(r.deck); }
     else if (pantallaCuenta(r)) { /* listo */ }
     else pintarInicio(r.q);
   } catch {

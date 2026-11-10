@@ -795,3 +795,71 @@ button.enlace { background: none; border: 0; color: var(--verde); text-decoratio
   .dkl .c { display: none; }
   .dkb button { min-width: 32px; min-height: 34px; padding: 0 4px; }
 }
+
+/* ---- 0.9.4: escaner en el deck, galeria estilo Arena/MTGO y hoja de una carta (versiones) */
+.dk-qfila { display: flex; gap: 8px; align-items: stretch; }
+.dk-qfila .dk-q { flex: 1; min-width: 0; }
+.dk-cam { display: grid; place-items: center; min-width: 46px; border: 1px solid var(--linea); color: var(--verde); text-decoration: none; }
+.dk-vista { margin-left: auto; }
+.dk-nbtn { background: none; border: 0; padding: 0; text-align: left; cursor: pointer; color: inherit; font: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dk-nbtn:hover { color: var(--verde); text-decoration: underline; }
+.dk-gal { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 14px 8px; margin-top: 10px; align-items: start; }
+.dk-gcol h4 { margin: 0 0 5px; font-size: 12px; font-weight: 400; letter-spacing: .06em; color: var(--tenue); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dk-pila { display: flex; flex-direction: column; }
+.dk-gc { display: block; position: relative; width: 100%; aspect-ratio: 488 / 680; padding: 0; border: 1px solid var(--linea); border-radius: 4.8% / 3.4%;
+  overflow: hidden; background: var(--panel, var(--fondo)); box-shadow: 0 -2px 6px rgba(0,0,0,.5); cursor: pointer; color: inherit; font: inherit; }
+.dk-gc + .dk-gc { margin-top: -112%; }
+.dk-gc img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.dk-gn { position: absolute; left: 0; right: 0; top: 0; padding: 3px 22px 8px 5px; font-size: 10px; line-height: 1.25; text-align: left; color: #fff;
+  background: linear-gradient(rgba(0,0,0,.82), rgba(0,0,0,0)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 2px #000; }
+.dk-gc b { position: absolute; right: 3px; top: 3px; z-index: 1; background: rgba(0,0,0,.8); color: #fff; font-size: 11px; font-weight: 400; border-radius: 3px; padding: 0 4px; }
+.dk-gc:hover, .dk-gc:focus-visible { z-index: 2; }
+.dk-gc.ok { box-shadow: inset 3px 0 0 var(--verde), 0 -2px 6px rgba(0,0,0,.5); }
+.dk-gc.medio { box-shadow: inset 3px 0 0 var(--ambar), 0 -2px 6px rgba(0,0,0,.5); }
+.dk-gc.no { box-shadow: inset 3px 0 0 var(--rojo), 0 -2px 6px rgba(0,0,0,.5); }
+.dk-gc.ilegal img { filter: grayscale(.85) brightness(.7); }
+.dk-hoja { position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,.6); display: flex; align-items: flex-end; justify-content: center; }
+.dk-hoja[hidden] { display: none; }
+.dk-hoja-c { background: var(--fondo); border: 1px solid var(--linea); border-bottom: 0; border-radius: 14px 14px 0 0; width: min(760px, 100%); max-height: 88dvh; overflow-y: auto;
+  padding: 12px 16px calc(16px + env(safe-area-inset-bottom)); }
+.dk-hoja-cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.dk-hoja-cab h2 { margin: 0; font-size: 17px; }
+.dk-hoja-cab .cerrar { min-width: 40px; min-height: 40px; border: 1px solid var(--linea); border-radius: 8px; background: transparent; cursor: pointer; }
+.dk-hoja-top { display: flex; gap: 14px; margin: 10px 0; }
+.dk-hoja-img { width: min(46%, 230px); aspect-ratio: 488 / 680; border-radius: 4.8% / 3.4%; flex: none; object-fit: cover; }
+.dk-hoja-dat { min-width: 0; } .dk-hoja-dat p { margin: 0 0 8px; }
+.dk-hoja-q { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.dk-hoja-q b { min-width: 28px; text-align: center; }
+.dk-vers { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.dk-ver { display: flex; flex-direction: column; gap: 2px; padding: 4px; border: 1px solid var(--linea); border-radius: 8px; background: transparent; color: inherit; font: inherit; font-size: 11px; cursor: pointer; text-align: left; }
+.dk-ver img { width: 100%; aspect-ratio: 488 / 680; object-fit: cover; border-radius: 4.8% / 3.4%; }
+.dk-ver b { font-weight: 400; color: var(--ambar); }
+.dk-ver.activo { border-color: var(--verde); box-shadow: 0 0 0 1px var(--verde); }
+.dk-ver:disabled { cursor: default; opacity: 1; }
+body.con-hoja { overflow: hidden; }
+@media (max-width: 420px) { .dk-gal { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 6px; } .dk-hoja-top { flex-direction: column; } .dk-hoja-img { width: 62%; align-self: center; } }
+
+/* ---- 0.9.4: pantalla APP (descarga del instalador) */
+.boton-app { display: inline-grid; place-items: center; min-height: 36px; padding: 0 10px; border: 1px solid var(--verde); border-radius: 8px; color: var(--verde); text-decoration: none; font-size: 13px; letter-spacing: .08em; }
+.app-desc { max-width: 640px; margin: 0 auto; }
+.app-hero { display: flex; gap: 16px; align-items: center; margin: 10px 0 18px; }
+.app-logo .logo { width: 64px; height: 64px; filter: drop-shadow(0 0 10px color-mix(in srgb, var(--verde) 40%, transparent)); }
+.app-hero h1 { margin: 0; font-size: 22px; letter-spacing: .04em; }
+.app-ver { margin: 2px 0 0; color: var(--verde); font-size: 14px; }
+.app-tarjeta { border: 1px solid var(--linea); border-radius: 10px; padding: 16px; margin-bottom: 14px; background: color-mix(in srgb, var(--fondo) 92%, var(--texto)); }
+.app-tarjeta h2 { margin: 0 0 8px; font-size: 13px; font-weight: 400; letter-spacing: .14em; color: var(--tenue); }
+.app-tarjeta p { margin: 0 0 10px; }
+.app-datos { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; margin-bottom: 14px; }
+.app-boton { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; text-decoration: none; letter-spacing: .06em; }
+.app-boton.sec { background: transparent; color: var(--verde); border: 1px solid var(--verde); }
+.app-barrita { height: 3px; background: var(--linea); border-radius: 2px; overflow: hidden; margin-top: 10px; }
+.app-barrita i { display: block; height: 100%; width: 0; background: var(--verde); transition: width 1.4s ease-out; }
+.app-pasos { margin-top: 14px; } .app-pasos .ok { color: var(--verde); }
+.app-paso { display: grid; grid-template-columns: 26px 1fr; gap: 8px; margin: 8px 0; font-size: 14px; }
+.app-paso > span { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--verde); color: var(--verde); display: grid; place-items: center; font-size: 12px; }
+.app-aviso { border-left: 2px solid var(--ambar); padding: 6px 10px; margin-top: 6px; font-size: 13px; background: color-mix(in srgb, var(--ambar) 7%, transparent); }
+.app-aviso b { color: var(--ambar); font-weight: 400; }
+.app-fila { display: flex; gap: 8px; } .app-fila > * { flex: 1; }
+.app-prox { opacity: .6; } .app-prox .chip { margin-left: 6px; font-size: 11px; }
+.app-tarjeta details summary { cursor: pointer; } .app-tarjeta ul { margin: 8px 0 0; padding-left: 18px; } .app-tarjeta li { margin: 3px 0; }
+.dk-hoja .simbolo { width: 16px; height: 16px; vertical-align: -3px; margin-right: 1px; }
