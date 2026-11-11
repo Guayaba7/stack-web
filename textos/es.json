@@ -449,5 +449,15 @@
   "app.android": "La app para celular viene en camino. Mientras, usa esta página: precios, escáner y tus decks.",
   "app.sin_datos": "No se pudo consultar la última versión.",
   "app.sin_datos_largo": "No se pudo consultar la última versión ahorita. Puedes bajarla desde la página de versiones.",
-  "app.ir_github": "Ver versiones"
+  "app.ir_github": "Ver versiones",
+  "dk.ver_mas": "Agregar 1 de esta versión (en su propia línea)",
+  "dk.vaciar": "Vaciar",
+  "dk.vaciar_seguro": "¿Quitar las {n}? Toca otra vez",
+  "dk.ya_vacio": "El deck ya está vacío.",
+  "dk.vaciado": "Deck vaciado ({n} cartas; el comandante se queda).",
+  "dk.deshacer": "Deshacer",
+  "dk.regresadas": "Se regresaron las cartas.",
+  "dk.elegir_version": "Elegir versión",
+  "escaner.abrir_panel": "Ver acabados, ediciones y cantidad",
+  "escaner.cerrar_panel": "Hacer chico el panel"
 }

@@ -840,7 +840,8 @@ body.con-hoja { overflow: hidden; }
 @media (max-width: 420px) { .dk-gal { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 6px; } .dk-hoja-top { flex-direction: column; } .dk-hoja-img { width: 62%; align-self: center; } }
 
 /* ---- 0.9.4: pantalla APP (descarga del instalador) */
-.boton-app { display: inline-grid; place-items: center; min-height: 36px; padding: 0 10px; border: 1px solid var(--verde); border-radius: 8px; color: var(--verde); text-decoration: none; font-size: 13px; letter-spacing: .08em; }
+.boton-app { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; margin-right: 10px; border-radius: 0; border: 1px solid var(--linea); color: var(--verde); text-decoration: none; font-size: 11px; letter-spacing: .02em; box-sizing: border-box; }
+.boton-app:hover { border-color: var(--verde); }
 .app-desc { max-width: 640px; margin: 0 auto; }
 .app-hero { display: flex; gap: 16px; align-items: center; margin: 10px 0 18px; }
 .app-logo .logo { width: 64px; height: 64px; filter: drop-shadow(0 0 10px color-mix(in srgb, var(--verde) 40%, transparent)); }
@@ -863,3 +864,26 @@ body.con-hoja { overflow: hidden; }
 .app-prox { opacity: .6; } .app-prox .chip { margin-left: 6px; font-size: 11px; }
 .app-tarjeta details summary { cursor: pointer; } .app-tarjeta ul { margin: 8px 0 0; padding-left: 18px; } .app-tarjeta li { margin: 3px 0; }
 .dk-hoja .simbolo { width: 16px; height: 16px; vertical-align: -3px; margin-right: 1px; }
+
+/* ---- 0.9.5: varias versiones de una carta, basicas a un toque */
+.dk-vet { font-style: normal; font-size: 11px; color: var(--ambar); margin-left: 4px; white-space: nowrap; }
+.dk-verw { position: relative; display: flex; flex-direction: column; }
+.dk-verw .dk-ver { flex: 1; position: relative; }
+.dk-ver em { position: absolute; left: 7px; top: 7px; font-style: normal; font-size: 11px; background: rgba(0,0,0,.8); color: #fff; border-radius: 3px; padding: 0 4px; }
+.dk-veradd { margin-top: 4px; min-height: 32px; border: 1px solid var(--linea); border-radius: 8px; background: transparent; color: var(--verde); cursor: pointer; font: inherit; font-size: 13px; }
+.dk-veradd:hover { border-color: var(--verde); }
+.dk-tver { color: var(--tenue); font-size: 12px; }
+.dk-tvers { color: var(--ambar); }
+
+/* ---- 0.9.5: panel del escaner compacto (una linea abajo); ▴ lo abre con acabados, ediciones y cantidad */
+.res-cab { display: flex; align-items: center; gap: 8px; }
+.res-cab .res-fila { flex: 1; min-width: 0; }
+.res-abrir { display: flex; align-items: center; gap: 6px; min-width: 44px; min-height: 44px; padding: 0 10px; border: 1px solid var(--linea); border-radius: 8px; background: transparent; color: var(--texto); cursor: pointer; font: inherit; }
+.res-abrir b { font-size: 16px; color: var(--verde); }
+.res-abrir span { font-size: 13px; color: var(--verde); }
+.res-abrir.aviso { border-color: var(--ambar); color: var(--ambar); }
+.esc-panel.compacto { padding: 6px 8px; }
+.esc-panel.compacto > :not(.res-cab) { display: none; }
+.esc-panel.compacto .res-fila img { width: 34px; height: 47px; }
+.esc-panel.compacto .res-fila .titulo { font-size: 16px; }
+.esc-panel.compacto .res-precio { font-size: 18px; }

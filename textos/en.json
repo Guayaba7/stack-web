@@ -449,5 +449,15 @@
   "app.android": "The phone app is on its way. Meanwhile, use this site: prices, scanner and your decks.",
   "app.sin_datos": "Could not check the latest version.",
   "app.sin_datos_largo": "Could not check the latest version right now. You can get it from the releases page.",
-  "app.ir_github": "See releases"
+  "app.ir_github": "See releases",
+  "dk.ver_mas": "Add 1 of this printing (on its own line)",
+  "dk.vaciar": "Clear",
+  "dk.vaciar_seguro": "Remove all {n}? Tap again",
+  "dk.ya_vacio": "The deck is already empty.",
+  "dk.vaciado": "Deck cleared ({n} cards; the commander stays).",
+  "dk.deshacer": "Undo",
+  "dk.regresadas": "The cards are back.",
+  "dk.elegir_version": "Choose printing",
+  "escaner.abrir_panel": "Show finishes, editions and quantity",
+  "escaner.cerrar_panel": "Make the panel small"
 }

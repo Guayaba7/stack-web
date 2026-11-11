@@ -451,6 +451,7 @@ const ACAB_INV = { n: "nonfoil", f: "foil", e: "etched" };
 let destinoDeck = null;               // {id, nombre}: el escaner se abrio desde un deck (#/escaner/deck/ID): lo escaneado va a ese deck
 const llaveLote = () => (destinoDeck ? `${LOTE_LLAVE}.deck.${destinoDeck.id}` : LOTE_LLAVE);   // cada deck con su propio lote
 let lote = leerLote();                // [{k, nombre, set, num, acab, idioma, q}]
+let panelAbierto = false;             // el panel del escaner va compacto (una linea abajo); se abre tocando ▴
 let enPanel = null;                   // {id, k}: la carta del panel y la entrada del lote que le toca
 
 function leerLote() {
@@ -511,7 +512,7 @@ async function pintarResultado(panel, res, elegido = null) {
   const [k, set, num, acab] = fila;
   const nombre = nombreDeFila(fila);
   // en cadena: una carta nueva entra al lote; si en el panel se cambia el acabado o la edicion, se cambia la del lote
-  if (!enPanel || enPanel.id !== res.id) { sumarAlLote(fila, nombre); enPanel = { id: res.id, k }; }
+  if (!enPanel || enPanel.id !== res.id) { sumarAlLote(fila, nombre); enPanel = { id: res.id, k }; panelAbierto = false; }   // carta nueva: el panel vuelve a compacto
   else if (enPanel.k !== k) {
     const n = enLote(enPanel.k) ? 1 : 0;                         // si la quitaron del lote, sigue fuera
     if (n) sumarAlLote([enPanel.k], "", -1);
@@ -527,19 +528,23 @@ async function pintarResultado(panel, res, elegido = null) {
     ? `<div class="res-otras-tit">${res.dudosa ? `<span class="aviso-ed">${esc(t("escaner.dudosa"))}</span>` : `<span class="tenue">${esc(t("escaner.otras"))}</span>`}</div>
       <div class="ed-rejilla">${visibles.map((fs) => celdaEdicion(fs[0])).join("")}${visibles.length < res.otras.length ? `<button type="button" class="ed-cel ed-mas" data-mas-ed>+${res.otras.length - visibles.length}</button>` : ""}</div>`
     : "";
-  panel.innerHTML = `<a class="res-fila" href="#/c/${encodeURIComponent(k)}">
+  const abierto = panelAbierto;
+  panel.innerHTML = `<div class="res-cab"><a class="res-fila" href="#/c/${encodeURIComponent(k)}">
       <img src="${miniatura(k)}" alt="">
       <div class="medio"><div class="titulo">${esc(nombre)}</div><div class="sub">${simboloSet(set)} #${esc(num)} · ${esc(t(`acabado.${acab}`))}<span class="ed-promo" data-promo="${esc(k.split(":")[0])}"></span></div></div>
       <div class="der"><div class="res-precio num">${precioRapido(fila)}</div><div class="tiendas">${NOMBRE_FUENTE[precioFila(fila, fuentePreferida()).fuente]}</div></div></a>
+      <button type="button" class="res-abrir${res.dudosa && !abierto ? " aviso" : ""}" data-abrir aria-expanded="${abierto}" aria-label="${esc(t(abierto ? "escaner.cerrar_panel" : "escaner.abrir_panel"))}" title="${esc(t(abierto ? "escaner.cerrar_panel" : "escaner.abrir_panel"))}">${q ? `<span class="num">×${q}</span>` : ""}${res.dudosa && !abierto ? "⚠" : ""}<b>${abierto ? "▾" : "▴"}</b></button></div>
     <div class="res-tiendas num" id="res-tiendas"></div>
     <div class="res-lote">${q
       ? `<span class="ok">✓ ${esc(t("lote.en_lote", { n: q }))}</span><button type="button" class="chip-acab" data-q="-1" aria-label="${esc(t("lote.menos"))}">−</button><button type="button" class="chip-acab" data-q="1" aria-label="${esc(t("lote.mas"))}">+</button>`
       : `<span class="tenue">${esc(t("lote.quitada"))}</span><button type="button" class="chip-acab" data-q="1">${esc(t("lote.volver"))}</button>`}</div>
     <div class="res-acabados">${acabados}</div>${otras}`;
   panel.hidden = false;
+  panel.classList.toggle("compacto", !abierto);
   adornarEdiciones(panel);
   panel.classList.remove("anterior");
   panel.onclick = (e) => {
+    if (e.target.closest("[data-abrir]")) { e.preventDefault(); panelAbierto = !panelAbierto; pintarResultado(panel, res, fila); return; }
     const bq = e.target.closest("[data-q]");
     if (bq) { e.preventDefault(); sumarAlLote(fila, nombre, Number(bq.dataset.q)); pintarResultado(panel, res, fila); return; }
     const b = e.target.closest("[data-acab]");
