@@ -890,11 +890,13 @@ body.con-hoja { overflow: hidden; }
 
 /* ---- 0.9.6: reparto entre versiones, 🔄 cartas de dos caras, link del deck */
 .flipw { position: relative; }
-.gflip { position: absolute; top: 6px; right: 6px; z-index: 3; display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 1px solid var(--linea);
-  border-radius: 0; background: color-mix(in srgb, var(--fondo) 82%, transparent); color: var(--texto); font-size: 15px; line-height: 1; cursor: pointer; }
-.gflip:hover, .gflip.on { border-color: var(--verde); }
-.dk-gc .gflip { top: 22px; right: 3px; width: 24px; height: 24px; font-size: 12px; }
-.dk-img .gflip { top: auto; bottom: 4px; left: 4px; right: auto; }
+.gflip { position: absolute; top: 6px; right: 6px; z-index: 3; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 1px solid var(--verde);
+  border-radius: 0; background: color-mix(in srgb, var(--fondo) 85%, transparent); color: var(--verde); line-height: 1; cursor: pointer; }
+.gflip svg { display: block; }
+.gflip:hover, .gflip.on { background: var(--verde); color: var(--fondo); }
+.dk-gc .gflip { top: 22px; right: 3px; width: 26px; height: 26px; }
+.dk-gc .gflip svg { width: 12px; height: 12px; }
+.dk-img .gflip { top: auto; bottom: 5px; left: 5px; right: auto; }
 .dk-gnv { position: absolute; left: 3px; bottom: 3px; z-index: 1; background: rgba(0,0,0,.8); color: var(--ambar); font-size: 10px; border-radius: 3px; padding: 0 4px; }
 .dkl .dk-nbtn { min-width: 0; }
 .dkl .dk-vet { display: block; margin: 1px 0 0; overflow: hidden; text-overflow: ellipsis; }

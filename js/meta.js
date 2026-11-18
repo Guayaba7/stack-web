@@ -108,7 +108,7 @@ function regresarCopia(D, n, z, v) {                  // - de una version: esa c
   if (!v || !sumarV(D, n, z, v, -1)) return false;
   sumarV(D, n, z, "", 1); return true;
 }
-// ---- cartas de dos caras: 🔄 voltea la imagen (Delver of Secrets, las MDFC...)
+// ---- cartas de dos caras: el boton de voltear voltea la imagen (Delver of Secrets, las MDFC...)
 const LAYOUT_2CARAS = new Set(["transform", "modal_dfc", "reversible_card", "double_faced_token"]);
 export function dosCaras(n) {
   const o = oraDe(n); if (!o) return false;
@@ -117,7 +117,8 @@ export function dosCaras(n) {
   if (!String(o.coste || "").includes(" // ")) return true;
   return !/Adventure|Room|Omen/.test(o.tipo) && !o.tipo.split(" // ").every((x) => /^(Instant|Sorcery)/.test(x.trim()));
 }
-const btnVoltear = (n, tag = "button") => dosCaras(n) ? `<${tag}${tag === "button" ? ' type="button"' : ' role="button" tabindex="0"'} class="gflip" data-flip title="${esc(t("dk.voltear"))}" aria-label="${esc(t("dk.voltear"))}">🔄</${tag}>` : "";
+export const ICO_VOLTEAR = `<svg viewBox="0 0 12 12" width="15" height="15" aria-hidden="true"><path d="M2.2 5.3A3.9 3.9 0 0 1 9.3 3.4M9.6 1.3v2.4H7.2M9.8 6.7A3.9 3.9 0 0 1 2.7 8.6M2.4 10.7V8.3h2.4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+const btnVoltear = (n, tag = "button") => dosCaras(n) ? `<${tag}${tag === "button" ? ' type="button"' : ' role="button" tabindex="0"'} class="gflip" data-flip title="${esc(t("dk.voltear"))}" aria-label="${esc(t("dk.voltear"))}">${ICO_VOLTEAR}</${tag}>` : "";
 // nombres en otros idiomas (buscar.json trae "nombre|alias|..." ya normalizado): "relampago" encuentra Lightning Bolt
 let ALIAS_W = null;
 const aliasLista = (n) => { if (!ALIAS_W) { ALIAS_W = new Map(); for (const x of datos().buscar?.nombres || []) if (x[1]) ALIAS_W.set(x[0], x[1].split("|")); } return ALIAS_W.get(n) || []; };

@@ -266,7 +266,7 @@ async function pintarDetalles(sid, k) {
   const caras = c.card_faces && !c.oracle_text ? c.card_faces : [c];
   const cajaImg = document.getElementById("ficha-imgw");          // cartas de dos caras (Delver of Secrets, MDFC): 🔄 muestra la de atras
   if (cajaImg && !cajaImg.querySelector("[data-flip]") && c.card_faces?.length > 1 && c.card_faces[1].image_uris)
-    cajaImg.insertAdjacentHTML("beforeend", `<button type="button" class="gflip" data-flip title="${esc(t("dk.voltear"))}" aria-label="${esc(t("dk.voltear"))}">🔄</button>`);
+    cajaImg.insertAdjacentHTML("beforeend", `<button type="button" class="gflip" data-flip title="${esc(t("dk.voltear"))}" aria-label="${esc(t("dk.voltear"))}">${meta.ICO_VOLTEAR}</button>`);
   const estados = { legal: ["legal", "detalles.legal"], not_legal: ["no", "detalles.no_legal"], banned: ["ban", "detalles.prohibida"], restricted: ["res", "detalles.restringida"] };
   const legal = FORMATOS.filter((f) => c.legalities?.[f]).map((f) => {
     const [clase, txt] = estados[c.legalities[f]] || ["no", "detalles.no_legal"];
