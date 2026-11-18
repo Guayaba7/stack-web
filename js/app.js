@@ -199,7 +199,7 @@ async function vistaFicha(k) {
   const enlaces = [[f.url_scryfall, "Scryfall"], [f.scg?.url, "SCG"], [ck?.url, "Card Kingdom"]]
     .filter(([u]) => u).map(([u, s]) => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(t("ficha.ver_en", { sitio: s }))}</a>`).join("");
   const img = f.img
-    ? `<img class="ficha-img" src="${esc(f.img)}" alt="${esc(f.nombre)}" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ficha-img sin-imagen',textContent:'${esc(t("ficha.sin_imagen"))}'}))">`
+    ? `<span class="ficha-imgw flipw" id="ficha-imgw"><img class="ficha-img" src="${esc(f.img)}" alt="${esc(f.nombre)}" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ficha-img sin-imagen',textContent:'${esc(t("ficha.sin_imagen"))}'}))"></span>`
     : `<div class="ficha-img sin-imagen">${esc(f.nombre)}<br>${esc((f.set || "").toUpperCase())}</div>`;
 
   app.innerHTML = `<a class="volver" href="#/" data-atras>${esc(t("ficha.atras"))}</a>
@@ -264,6 +264,9 @@ async function pintarDetalles(sid, k) {
   }
   if (location.hash !== `#/c/${encodeURIComponent(k)}`) return;
   const caras = c.card_faces && !c.oracle_text ? c.card_faces : [c];
+  const cajaImg = document.getElementById("ficha-imgw");          // cartas de dos caras (Delver of Secrets, MDFC): 🔄 muestra la de atras
+  if (cajaImg && !cajaImg.querySelector("[data-flip]") && c.card_faces?.length > 1 && c.card_faces[1].image_uris)
+    cajaImg.insertAdjacentHTML("beforeend", `<button type="button" class="gflip" data-flip title="${esc(t("dk.voltear"))}" aria-label="${esc(t("dk.voltear"))}">🔄</button>`);
   const estados = { legal: ["legal", "detalles.legal"], not_legal: ["no", "detalles.no_legal"], banned: ["ban", "detalles.prohibida"], restricted: ["res", "detalles.restringida"] };
   const legal = FORMATOS.filter((f) => c.legalities?.[f]).map((f) => {
     const [clase, txt] = estados[c.legalities[f]] || ["no", "detalles.no_legal"];
@@ -296,6 +299,19 @@ async function pintarDetalles(sid, k) {
   }
 }
 
+// ---------- 🔄 cartas de dos caras (0.9.6) ----------
+function voltear(b) {
+  const caja = b.closest(".flipw"), img = caja && caja.querySelector("img"); if (!img) return;
+  const src = img.getAttribute("src") || "";
+  if (!img.dataset.frente) { if (!src.includes("/front/")) return; img.dataset.frente = src; }
+  const atras = img.dataset.frente.replace("/front/", "/back/"), vaAtras = src !== atras;
+  img.onerror = vaAtras ? () => { img.onerror = null; img.src = img.dataset.frente; b.classList.remove("on"); } : null;
+  img.src = vaAtras ? atras : img.dataset.frente; b.classList.toggle("on", vaAtras);
+}
+const alVoltear = (e) => { const b = e.target.closest && e.target.closest("[data-flip]"); if (!b) return; e.preventDefault(); e.stopPropagation(); if (e.type === "click") voltear(b); };
+document.addEventListener("click", alVoltear, true);
+document.addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && e.target.matches?.("[data-flip]")) { e.preventDefault(); e.stopPropagation(); voltear(e.target); } }, true);
+
 // ---------- Rutas ----------
 function leerRuta() {
   const h = location.hash.replace(/^#/, "") || "/";
@@ -314,6 +330,7 @@ function leerRuta() {
   if (h.startsWith("/terminos")) return { pantalla: "terminos" };
   if (h === "/app" || h.startsWith("/app/")) return { pantalla: "app" };
   if (h.startsWith("/meta")) return { pantalla: "meta", fmt: decodeURIComponent(h.split("/")[2] || "") };
+  if (h.startsWith("/d/")) return { pantalla: "decklink", dato: h.slice(3) };
   if (h.startsWith("/decks")) return { pantalla: "decks", id: decodeURIComponent(h.split("/")[2] || "") };
   const q = new URLSearchParams(h.split("?")[1] || "").get("q") || "";
   return { pantalla: "inicio", q };
@@ -412,7 +429,7 @@ const soltarVista = () => { app.onclick = app.oninput = app.onchange = null; doc
 function pantallaCuenta(r) {
   soltarVista();
   document.body.classList.remove("en-portada");
-  document.body.classList.toggle("ancho", r.pantalla === "meta" || r.pantalla === "decks");
+  document.body.classList.toggle("ancho", r.pantalla === "meta" || r.pantalla === "decks" || r.pantalla === "decklink");
   if (r.pantalla === "cuenta") cv.vistaCuenta(app);
   else if (r.pantalla === "inventarios") cv.vistaInventarios(app);
   else if (r.pantalla === "stack") cv.vistaStack(app, r.codigo || "");
@@ -423,6 +440,7 @@ function pantallaCuenta(r) {
   else if (r.pantalla === "articulo") art.vistaArticulo(app, r.slug);
   else if (r.pantalla === "meta") meta.vistaMeta(app, r.fmt);
   else if (r.pantalla === "decks") meta.vistaDecks(app, r.id);
+  else if (r.pantalla === "decklink") meta.vistaDeckLink(app, r.dato);
   else if (r.pantalla === "app") vistaApp(app);
   else return false;
   return true;

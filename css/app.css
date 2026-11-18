@@ -887,3 +887,32 @@ body.con-hoja { overflow: hidden; }
 .esc-panel.compacto .res-fila img { width: 34px; height: 47px; }
 .esc-panel.compacto .res-fila .titulo { font-size: 16px; }
 .esc-panel.compacto .res-precio { font-size: 18px; }
+
+/* ---- 0.9.6: reparto entre versiones, 🔄 cartas de dos caras, link del deck */
+.flipw { position: relative; }
+.gflip { position: absolute; top: 6px; right: 6px; z-index: 3; display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 1px solid var(--linea);
+  border-radius: 0; background: color-mix(in srgb, var(--fondo) 82%, transparent); color: var(--texto); font-size: 15px; line-height: 1; cursor: pointer; }
+.gflip:hover, .gflip.on { border-color: var(--verde); }
+.dk-gc .gflip { top: 22px; right: 3px; width: 24px; height: 24px; font-size: 12px; }
+.dk-img .gflip { top: auto; bottom: 4px; left: 4px; right: auto; }
+.dk-gnv { position: absolute; left: 3px; bottom: 3px; z-index: 1; background: rgba(0,0,0,.8); color: var(--ambar); font-size: 10px; border-radius: 3px; padding: 0 4px; }
+.dkl .dk-nbtn { min-width: 0; }
+.dkl .dk-vet { display: block; margin: 1px 0 0; overflow: hidden; text-overflow: ellipsis; }
+.dk-hoja-imgw { display: block; flex: none; width: min(46%, 230px); }
+.dk-hoja-imgw .dk-hoja-img { width: 100%; display: block; }
+.dk-rep-res { color: var(--ambar); font-size: 13px; }
+.dk-verw.en .dk-ver { border-color: var(--verde); }
+.dk-vq { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 4px; margin-top: 4px; }
+.dk-vq button { min-height: 32px; border: 1px solid var(--linea); border-radius: 0; background: transparent; color: var(--verde); cursor: pointer; font: inherit; font-size: 15px; }
+.dk-vq button:hover:not(:disabled) { border-color: var(--verde); }
+.dk-vq button:disabled { opacity: .35; cursor: default; }
+.dk-vq b { min-width: 22px; text-align: center; font-weight: 400; }
+.dk-cmd-img { display: block; position: relative; padding: 0; border: 0; background: none; cursor: pointer; color: inherit; font: inherit; }
+.dk-cmd-ver { position: absolute; left: 4px; bottom: 4px; font-style: normal; font-size: 10px; background: rgba(0,0,0,.8); color: var(--ambar); border-radius: 3px; padding: 0 4px; }
+.dk-cmd-carta .gflip { top: 4px; right: auto; left: 4px; width: 26px; height: 26px; font-size: 13px; }
+.ficha-imgw { display: block; width: min(72%, 300px); margin: 4px auto 14px; }
+.ficha-imgw .ficha-img { width: 100%; margin: 0; }
+.dk-linktxt { width: 100%; margin-top: 6px; font: inherit; font-size: 12px; }
+.dk-pub .meta-det { max-width: 900px; }
+@media (min-width: 720px) { .ficha-imgw { width: 100%; margin: 0; } }
+@media (max-width: 420px) { .dk-hoja-imgw { width: 62%; align-self: center; } }

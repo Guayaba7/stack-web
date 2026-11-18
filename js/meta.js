@@ -69,6 +69,55 @@ const impDe = (c) => {                                // la fila de buscar.json 
   return null;
 };
 const etVer = (c) => { const f = impDe(c); return f ? `${String(f[1]).toUpperCase()} #${f[2]}${f[3] !== "n" ? " ★" : ""}` : ""; };
+// ---- varias versiones de una carta (0.9.6): una fila por carta y zona con su total; cada version es una linea del deck
+function agrupar(cartas) {
+  const m = new Map();
+  for (const c of cartas) { const k = c.z + "\u0001" + c.n; let g = m.get(k); if (!g) { g = { n: c.n, z: c.z, q: 0, lineas: [] }; m.set(k, g); } g.q += c.q; g.lineas.push(c); }
+  return [...m.values()];
+}
+const precioGrupo = (g, tienda) => { let s = 0, hay = false; for (const c of g.lineas) { const v = precioCartaW(c, tienda); if (v != null) { s += v * c.q; hay = true; } } return hay ? s : null; };
+const lineaMayor = (g) => g.lineas.slice().sort((a, b) => b.q - a.q || (b.sid ? 1 : 0) - (a.sid ? 1 : 0))[0];
+const nVersiones = (g) => g.lineas.length;
+function repartoTexto(g) {                            // "2 ◆ M11 #146 · 2 ◆ 2XM #117" (las sin version: "la mas barata")
+  if (!g.lineas.some((c) => c.sid)) return "";
+  if (g.lineas.length === 1) return "◆ " + etVer(g.lineas[0]);
+  return g.lineas.slice().sort((a, b) => b.q - a.q).map((c) => `${c.q} ${c.sid ? "◆ " + etVer(c) : t("dk.mas_barata")}`).join(" · ");
+}
+// las operaciones del reparto (sobre el deck, sin pintar)
+function sumarV(D, n, z, v, d) {                     // suma d copias a la linea de esa version ("" = sin version)
+  let c = D.cartas.find((x) => x.n === n && x.z === z && vDe(x) === v);
+  if (!c) { if (d <= 0) return false; const [sid, acab] = v ? v.split("|") : []; c = { n, q: 0, z, ...(sid ? { sid, acab: acab || "nonfoil" } : {}) }; D.cartas.push(c); }
+  if (d < 0 && c.q <= 0) return false;
+  c.q = Math.max(0, Math.min(z === "cmd" ? 1 : 999, c.q + d)); D.cartas = D.cartas.filter((x) => x.q > 0); return true;
+}
+function grupoMas(D, n, z, d) {                       // el total: + va a la linea sin version (o a la unica que hay); - sale primero de la sin version
+  for (let i = 0; i < Math.abs(d); i++) {
+    const ls = D.cartas.filter((x) => x.n === n && x.z === z);
+    if (d > 0) { if (z === "cmd" && ls.length) break; sumarV(D, n, z, ls.length === 1 ? vDe(ls[0]) : "", 1); }
+    else { if (!ls.length) break; const c = ls.find((x) => !x.sid) || ls.slice().sort((a, b) => a.q - b.q)[0]; sumarV(D, n, z, vDe(c), -1); }
+  }
+}
+function pasarCopia(D, n, z, v) {                     // + de una version: le pasa una copia de otra (primero de la sin version); el total no cambia
+  const otras = D.cartas.filter((x) => x.n === n && x.z === z && vDe(x) !== v);
+  const src = otras.find((x) => !x.sid) || otras.sort((a, b) => b.q - a.q)[0];
+  if (src) sumarV(D, n, z, vDe(src), -1);
+  else if (z === "cmd" && D.cartas.some((x) => x.n === n && x.z === z)) return false;
+  sumarV(D, n, z, v, 1); return true;
+}
+function regresarCopia(D, n, z, v) {                  // - de una version: esa copia regresa a la sin version (la mas barata)
+  if (!v || !sumarV(D, n, z, v, -1)) return false;
+  sumarV(D, n, z, "", 1); return true;
+}
+// ---- cartas de dos caras: 🔄 voltea la imagen (Delver of Secrets, las MDFC...)
+const LAYOUT_2CARAS = new Set(["transform", "modal_dfc", "reversible_card", "double_faced_token"]);
+export function dosCaras(n) {
+  const o = oraDe(n); if (!o) return false;
+  if (o.lay != null && o.lay !== "") return LAYOUT_2CARAS.has(o.lay);
+  if (!o.n.includes(" // ")) return false;                 // sin la columna layout (datos viejos): por el nombre, el coste y el tipo
+  if (!String(o.coste || "").includes(" // ")) return true;
+  return !/Adventure|Room|Omen/.test(o.tipo) && !o.tipo.split(" // ").every((x) => /^(Instant|Sorcery)/.test(x.trim()));
+}
+const btnVoltear = (n, tag = "button") => dosCaras(n) ? `<${tag}${tag === "button" ? ' type="button"' : ' role="button" tabindex="0"'} class="gflip" data-flip title="${esc(t("dk.voltear"))}" aria-label="${esc(t("dk.voltear"))}">🔄</${tag}>` : "";
 // nombres en otros idiomas (buscar.json trae "nombre|alias|..." ya normalizado): "relampago" encuentra Lightning Bolt
 let ALIAS_W = null;
 const aliasLista = (n) => { if (!ALIAS_W) { ALIAS_W = new Map(); for (const x of datos().buscar?.nombres || []) if (x[1]) ALIAS_W.set(x[0], x[1].split("|")); } return ALIAS_W.get(n) || []; };
@@ -122,7 +171,7 @@ async function cargarOraculo() {
   if (ORA) return ORA;
   if (!ORA_P) ORA_P = json("oraculo.json").then((d) => {
     const por = new Map(), filas = d.cartas.map((x) => ({ n: x[0], coste: x[1], cmc: x[2] || 0, tipo: x[3], id: x[4], col: x[5], leg: x[6], gc: x[7], cmd: x[8],
-      pareja: x[9], sid: x[10], pt: x[11], rar: (x[12] || "").slice(0, 1), rank: x[13] ?? 999999, nn: normal(x[0]) }));
+      pareja: x[9], sid: x[10], pt: x[11], rar: (x[12] || "").slice(0, 1), rank: x[13] ?? 999999, lay: x[14] ?? null, nn: normal(x[0]) }));
     for (const o of filas) { por.set(o.n, o); por.set(o.nn, o); if (o.n.includes(" // ")) { const f = o.n.split(" // ")[0]; if (!por.has(f)) por.set(f, o); por.set(normal(f), o); } }
     ORA = { fmts: d.formatos, filas, por };
     return ORA;
@@ -169,17 +218,17 @@ function htmlDeck(deck, op = {}) {
   const br = esCmd(deck.formato) && ORA ? `<span class="dkbr" title="${esc(t("dk.bracket_ayuda"))}">BRACKET ${gc === 0 ? "1–2" : gc <= 3 ? "3" : "4"}</span>` : "";
   const prob = op.editable ? problemas(deck) : [];
   let h = "";
-  const linea = (c) => {
-    const o = oraDe(c.n), v = precioCartaW(c, tienda), tg = op.tengo ? op.tengo[c.n] || 0 : null;
+  const linea = (g) => {                              // una fila por carta: su total, el reparto entre versiones y la suma de sus precios
+    const o = oraDe(g.n), v = precioGrupo(g, tienda), tg = op.tengo ? op.tengo[g.n] || 0 : null;
     const mal = op.editable && o && ["b", "-"].includes(legal(o, deck.formato));
-    const ev = etVer(c);
-    return `<li class="dkl${mal ? " ilegal" : ""}" data-n="${esc(c.n)}" data-z="${c.z}" data-v="${esc(vDe(c))}"><span class="q num">${c.q}</span><button type="button" class="n dk-nbtn" data-carta title="${esc(t("dk.ver_carta"))}">${esc(c.n)}${ev ? ` <i class="dk-vet">◆ ${esc(ev)}</i>` : ""}</button><span class="c">${coste(o?.coste)}</span>` +
-      `<span class="r num">${v == null ? "—" : pesos2(v * c.q)}</span>${tg != null && !BASICAS.has(c.n) ? `<span class="tg ${tg >= c.q ? "ok" : tg ? "medio" : "no"}">${tg >= c.q ? "✓" : `${tg}/${c.q}`}</span>` : `<span class="tg"></span>`}` +
+    const rp = repartoTexto(g);
+    return `<li class="dkl${mal ? " ilegal" : ""}" data-n="${esc(g.n)}" data-z="${g.z}"><span class="q num">${g.q}</span><button type="button" class="n dk-nbtn" data-carta title="${esc(t("dk.ver_carta"))}">${esc(g.n)}${rp ? ` <i class="dk-vet">${esc(rp)}</i>` : ""}</button><span class="c">${coste(o?.coste)}</span>` +
+      `<span class="r num">${v == null ? "—" : pesos2(v)}</span>${tg != null && !BASICAS.has(g.n) ? `<span class="tg ${tg >= g.q ? "ok" : tg ? "medio" : "no"}">${tg >= g.q ? "✓" : `${tg}/${g.q}`}</span>` : `<span class="tg"></span>`}` +
       `${op.editable ? `<span class="dkb"><button type="button" data-q="-1" aria-label="−">−</button><button type="button" data-q="1" aria-label="+">+</button><button type="button" class="dk-x" data-x="1" aria-label="${esc(t("dk.quitar_todas"))}" title="${esc(t("dk.quitar_todas"))}">✕</button></span>` : ""}</li>`;
   };
-  const zona = (z, titulo) => { const cs = deck.cartas.filter((c) => c.z === z); if (!cs.length) return ""; return `<h3 class="dkg">${esc(titulo)} <span class="tenue">${cs.reduce((s, c) => s + c.q, 0)}</span></h3><ul class="dklista">${cs.map(linea).join("")}</ul>`; };
+  const zona = (z, titulo) => { const cs = agrupar(deck.cartas.filter((c) => c.z === z)); if (!cs.length) return ""; return `<h3 class="dkg">${esc(titulo)} <span class="tenue">${cs.reduce((s, c) => s + c.q, 0)}</span></h3><ul class="dklista">${cs.map(linea).join("")}</ul>`; };
   if (!op.editable) h += zona("cmd", t("dk.comandante"));      // en el editor el comandante tiene su propio lugar arriba
-  const main = deck.cartas.filter((c) => c.z === "main"), grupos = new Map();
+  const main = agrupar(deck.cartas.filter((c) => c.z === "main")), grupos = new Map();
   for (const c of main) { const g = grupoDe(c.n); if (!grupos.has(g)) grupos.set(g, []); grupos.get(g).push(c); }
   for (const [, g] of GRUPOS) {
     const cs = grupos.get(g); if (!cs) continue;
@@ -203,70 +252,75 @@ const ponerVistaDk = (v) => { try { localStorage.setItem("stack.dk_vista", v); }
 function htmlGaleria(deck, op = {}) {
   const tierra = (c) => (oraDe(c.n)?.tipo || "").split(" // ")[0].includes("Land"), cmc = (c) => Math.floor(oraDe(c.n)?.cmc || 0);
   const orden = (a, b) => (oraDe(a.n)?.cmc ?? 0) - (oraDe(b.n)?.cmc ?? 0) || a.n.localeCompare(b.n);
-  const main = deck.cartas.filter((c) => c.z === "main"), noT = main.filter((c) => !tierra(c));
-  const cols = [...(op.editable ? [] : [[t("dk.comandante"), deck.cartas.filter((c) => c.z === "cmd")]]),
+  const main = agrupar(deck.cartas.filter((c) => c.z === "main")), noT = main.filter((c) => !tierra(c));
+  const deZona = (z) => agrupar(deck.cartas.filter((c) => c.z === z));
+  const cols = [...(op.editable ? [] : [[t("dk.comandante"), deZona("cmd")]]),
     ["0–1", noT.filter((c) => cmc(c) <= 1)], ["2", noT.filter((c) => cmc(c) === 2)], ["3", noT.filter((c) => cmc(c) === 3)], ["4", noT.filter((c) => cmc(c) === 4)],
     ["5", noT.filter((c) => cmc(c) === 5)], ["6+", noT.filter((c) => cmc(c) >= 6)], [t("dk.g_tierras"), main.filter(tierra)],
-    [t("dk.side"), deck.cartas.filter((c) => c.z === "side")], [t("dk.quizas"), deck.cartas.filter((c) => c.z === "quizas")]];
-  const carta = (c) => {
-    const o = oraDe(c.n), sid = c.sid || o?.sid, tg = op.tengo ? op.tengo[c.n] || 0 : null;
+    [t("dk.side"), deZona("side")], [t("dk.quizas"), deZona("quizas")]];
+  const carta = (c) => {                             // c = la carta agrupada: se ve la version con mas copias
+    const o = oraDe(c.n), may = lineaMayor(c), sid = may.sid || o?.sid, tg = op.tengo ? op.tengo[c.n] || 0 : null, nv = nVersiones(c), rp = repartoTexto(c);
     const est = tg == null || BASICAS.has(c.n) ? "" : tg >= c.q ? " ok" : tg ? " medio" : " no";
     const mal = op.editable && o && ["b", "-"].includes(legal(o, deck.formato));
-    return `<button type="button" class="dk-gc${est}${mal ? " ilegal" : ""}" data-carta data-n="${esc(c.n)}" data-z="${c.z}" data-v="${esc(vDe(c))}" title="${c.q} × ${esc(c.n)}${c.sid ? " · " + esc(etVer(c)) : ""}">` +
-      `${sid ? `<img src="${esc(imgCarta(sid, "normal"))}" alt="" loading="lazy">` : ""}<span class="dk-gn">${esc(c.n)}</span>${c.q > 1 ? `<b class="num">×${c.q}</b>` : ""}</button>`;
+    return `<button type="button" class="dk-gc flipw${est}${mal ? " ilegal" : ""}" data-carta data-n="${esc(c.n)}" data-z="${c.z}" title="${c.q} × ${esc(c.n)}${rp ? " · " + esc(rp) : ""}">` +
+      `${sid ? `<img src="${esc(imgCarta(sid, "normal"))}" alt="" loading="lazy">` : ""}<span class="dk-gn">${esc(c.n)}</span>${c.q > 1 ? `<b class="num">×${c.q}</b>` : ""}` +
+      `${nv > 1 ? `<span class="dk-gnv">${esc(t("dk.n_versiones", { n: nv }))}</span>` : ""}${btnVoltear(c.n, "span")}</button>`;
   };
   const h = cols.filter(([, xs]) => xs.length).map(([et, xs]) => `<div class="dk-gcol"><h4>${esc(et)} <span class="tenue num">${xs.reduce((s_, c) => s_ + c.q, 0)}</span></h4>` +
     `<div class="dk-pila">${xs.sort(orden).map(carta).join("")}</div></div>`).join("");
   return `<div class="dk-gal">${h}</div>`;
 }
-// ---- hoja de una carta del deck: la imagen completa, cuantas, y sus versiones (elegir una = la que usa el deck)
-async function abrirHojaCarta(deck, n, z, op = {}, v0 = "") {
+// ---- hoja de una carta del deck (0.9.6): la imagen completa, el total y el reparto entre versiones.
+// Total −/+: copias de la carta (el + va a la mas barata). Cada version −/q/+: + le pasa una copia de otra version (primero de la
+// mas barata), − la regresa a la mas barata; tocar la imagen de una version = +. Sirve igual para el comandante (cambia su version).
+function cerrarHoja() { const h = document.getElementById("dk-hoja"); if (h) { h.hidden = true; h.innerHTML = ""; } document.body.classList.remove("con-hoja"); }
+async function abrirHojaCarta(deck, n, z, op = {}) {
   let hoja = document.getElementById("dk-hoja");
   if (!hoja) { hoja = document.createElement("div"); hoja.id = "dk-hoja"; hoja.className = "dk-hoja"; document.body.appendChild(hoja); }
   hoja.hidden = false; document.body.classList.add("con-hoja");
   await asegurarNombres([{ n }]);
-  let linea = deck.cartas.find((x) => x.n === n && x.z === z && vDe(x) === v0) || deck.cartas.find((x) => x.n === n && x.z === z) || null;
+  const o0 = oraDe(n); if (o0) n = deck.cartas.some((x) => x.n === n) ? n : o0.n;
+  let orden = null;                                   // el orden de las versiones queda fijo mientras la hoja esta abierta (el + no las mueve)
   const pintar = () => {
-    if (linea && !deck.cartas.includes(linea)) linea = deck.cartas.find((x) => x.n === n && x.z === z) || null;
-    const c = linea || { n, q: 0, z }, o = oraDe(n), tienda = op.tienda || "tcg";
-    const g = nombres().get(o ? o.n : n) || nombres().get(n), L = ACAB_L[c.acab || "nonfoil"] || "n";
-    const vers = g ? g[2].map((i) => datos().buscar.imp[i]).filter(Boolean).map((f) => ({ f, sid: String(f[0]).split(":")[0], v: precioImp(f, tienda) }))
-      .sort((a, b) => (a.v ?? 1e12) - (b.v ?? 1e12)).slice(0, 80) : [];
-    const sidVer = c.sid || o?.sid, usada = (x) => c.sid ? x.sid === c.sid && x.f[3] === L : false;
+    const ls = deck.cartas.filter((x) => x.n === n && x.z === z), total = ls.reduce((s_, x) => s_ + x.q, 0);
+    const o = oraDe(n), tienda = op.tienda || "tcg", g = nombres().get(o ? o.n : n) || nombres().get(n);
+    const qDe = (sid, L) => ls.filter((y) => y.sid === sid && (ACAB_L[y.acab || "nonfoil"] || "n") === L).reduce((t_, y) => t_ + y.q, 0);
+    const todas = g ? g[2].map((i) => datos().buscar.imp[i]).filter(Boolean).map((f) => ({ f, sid: String(f[0]).split(":")[0], v: precioImp(f, tienda) })) : [];
+    if (!orden) { const por = todas.slice().sort((a, b) => (a.v ?? 1e12) - (b.v ?? 1e12)); orden = por.slice(0, 80); for (const x of por.slice(80)) if (qDe(x.sid, x.f[3])) orden.push(x); }
+    const vers = orden, sinV = ls.filter((x) => !x.sid).reduce((s_, x) => s_ + x.q, 0);
+    const may = ls.length ? lineaMayor({ lineas: ls }) : null, sidVer = may?.sid || o?.sid;
+    const ed = op.editable;
     hoja.innerHTML = `<div class="dk-hoja-c" role="dialog" aria-label="${esc(n)}"><div class="dk-hoja-cab"><h2>${esc(o ? o.n : n)}</h2><button type="button" class="cerrar" data-h="cerrar" aria-label="${esc(t("ajustes.cerrar"))}">✕</button></div>
-      <div class="dk-hoja-top">${sidVer ? `<img class="dk-hoja-img" src="${esc(imgCarta(sidVer, "normal"))}" alt="">` : ""}
+      <div class="dk-hoja-top">${sidVer ? `<span class="dk-hoja-imgw flipw"><img class="dk-hoja-img" src="${esc(imgCarta(sidVer, "normal"))}" alt="">${btnVoltear(n)}</span>` : ""}
         <div class="dk-hoja-dat"><p>${coste(o?.coste)} <span class="tenue">${esc(o?.tipo || "")}</span></p>
-        ${op.editable ? `<div class="dk-hoja-q"><button type="button" class="chip-acab" data-h="menos" aria-label="−">−</button><b class="num">${c.q}</b><button type="button" class="chip-acab" data-h="mas" aria-label="+">+</button>
-          <button type="button" class="chip-acab" data-h="quitar">${esc(t("dk.quitar_todas"))}</button></div>` : ""}
-        <p class="tenue">${esc(op.editable ? t("dk.ver_ayuda") : t("dk.ver_ayuda_meta"))}</p></div></div>
-      <h3 class="dkg">${esc(t("dk.versiones"))} <span class="tenue">${vers.length}</span></h3>
-      <div class="dk-vers">${vers.map((x) => { const qv = deck.cartas.filter((y) => y.n === n && y.sid === x.sid && ACAB_L[y.acab || "nonfoil"] === x.f[3]).reduce((t_, y) => t_ + y.q, 0);
-        return `<div class="dk-verw"><button type="button" class="dk-ver${usada(x) ? " activo" : ""}" data-sid="${esc(x.sid)}" data-acab="${esc(x.f[3])}"${op.editable ? "" : " disabled"}>` +
-        `<img src="${esc(imgCarta(x.sid, "small"))}" alt="" loading="lazy">${qv ? `<em class="num">×${qv}</em>` : ""}<span>${esc(String(x.f[1]).toUpperCase())} #${esc(x.f[2])}</span><span class="tenue">${esc(t("acabado." + x.f[3]))}</span><b class="num">${pesos2(x.v)}</b></button>` +
-        `${op.editable ? `<button type="button" class="dk-veradd" data-veradd="${esc(x.sid)}" data-acab="${esc(x.f[3])}" title="${esc(t("dk.ver_mas"))}" aria-label="${esc(t("dk.ver_mas"))}">+1</button>` : ""}</div>`; }).join("") || `<p class="tenue">${esc(t("dk.sin_versiones"))}</p>`}</div></div>`;
+        ${ed ? `<div class="dk-hoja-q"><button type="button" class="chip-acab" data-h="menos" aria-label="−">−</button><b class="num">${total}</b><button type="button" class="chip-acab" data-h="mas" aria-label="+">+</button>
+          ${total ? `<button type="button" class="chip-acab" data-h="quitar">${esc(t("dk.quitar_todas"))}</button>` : ""}</div>` : `<p class="num"><b>${total}</b> ${esc(t("dk.cartas"))}</p>`}
+        ${total && ls.some((x) => x.sid) ? `<p class="dk-rep-res">${esc(repartoTexto({ lineas: ls }))}</p>` : sinV ? `<p class="tenue">${esc(t("dk.rep_todas_baratas", { n: sinV }))}</p>` : ""}
+        <p class="tenue">${esc(ed ? (z === "cmd" ? t("dk.rep_ayuda_cmd") : t("dk.rep_ayuda")) : t("dk.ver_ayuda_meta"))}</p></div></div>
+      <h3 class="dkg">${esc(t("dk.versiones"))} <span class="tenue">${todas.length}</span></h3>
+      <div class="dk-vers">${vers.map((x) => { const qv = qDe(x.sid, x.f[3]), v = `${x.sid}|${ACAB_DE[x.f[3]] || "nonfoil"}`;
+        return `<div class="dk-verw${qv ? " en" : ""}" data-v="${esc(v)}"><button type="button" class="dk-ver${qv ? " activo" : ""}" data-pasar${ed ? "" : " disabled"}>` +
+          `<img src="${esc(imgCarta(x.sid, "small"))}" alt="" loading="lazy">${qv ? `<em class="num">×${qv}</em>` : ""}<span>${esc(String(x.f[1]).toUpperCase())} #${esc(x.f[2])}</span><span class="tenue">${esc(t("acabado." + x.f[3]))}</span><b class="num">${pesos2(x.v)}</b></button>` +
+          `${ed ? `<div class="dk-vq"><button type="button" data-regresar${qv ? "" : " disabled"} aria-label="−">−</button><b class="num">${qv}</b><button type="button" data-pasar aria-label="+" title="${esc(t("dk.ver_mas"))}">+</button></div>` : ""}</div>`; }).join("") || `<p class="tenue">${esc(t("dk.sin_versiones"))}</p>`}</div></div>`;
   };
   pintar();
   hoja.onclick = (e) => {
-    if (e.target === hoja || e.target.closest('[data-h="cerrar"]')) { hoja.hidden = true; hoja.innerHTML = ""; document.body.classList.remove("con-hoja"); return; }
+    if (e.target.closest("[data-flip]")) return;
+    if (e.target === hoja || e.target.closest('[data-h="cerrar"]')) { cerrarHoja(); return; }
     if (!op.editable) return;
-    const b = e.target.closest("[data-h]");
-    if (b) { if (!linea) { if (b.dataset.h === "mas") { op.cambiar(n, z, 1); linea = deck.cartas.find((x) => x.n === n && x.z === z) || null; pintar(); } return; }
-      const dq = b.dataset.h === "mas" ? 1 : b.dataset.h === "menos" ? -1 : -linea.q;
-      op.cambiarLinea(linea, dq); if (!deck.cartas.includes(linea)) { hoja.hidden = true; hoja.innerHTML = ""; document.body.classList.remove("con-hoja"); } else pintar(); return; }
-    const va = e.target.closest("[data-veradd]");
-    if (va) { const zz = z === "cmd" ? "main" : z; op.cambiar(n, zz, 1, { sid: va.dataset.veradd, acab: ACAB_DE[va.dataset.acab] || "nonfoil" }); pintar(); return; }
-    const v = e.target.closest("[data-sid]");
-    if (v) { const c = linea;
-      if (!c) { const ex = { sid: v.dataset.sid, acab: ACAB_DE[v.dataset.acab] || "nonfoil" }; op.cambiar(n, z === "cmd" ? "main" : z, 1, ex);   // aun no esta en el deck: entra con esa version
-        linea = deck.cartas.find((y) => y.n === n && vDe(y) === `${ex.sid}|${ex.acab}`) || null; pintar(); return; }
-      c.sid = v.dataset.sid; c.acab = ACAB_DE[v.dataset.acab] || "nonfoil";
-      const igual = deck.cartas.find((y) => y !== c && y.n === c.n && y.z === c.z && vDe(y) === vDe(c));      // ya habia una linea con esa version: se juntan
-      if (igual) { igual.q += c.q; deck.cartas.splice(deck.cartas.indexOf(c), 1); linea = igual; }
-      op.cambiado(); pintar(); }
+    const b = e.target.closest("[data-h]"), D = deck;
+    if (b) {
+      if (b.dataset.h === "quitar") { D.cartas = D.cartas.filter((x) => !(x.n === n && x.z === z)); op.cambiado(n, z); cerrarHoja(); return; }
+      grupoMas(D, n, z, b.dataset.h === "mas" ? 1 : -1); op.cambiado(n, z); pintar(); return;
+    }
+    const w = e.target.closest(".dk-verw[data-v]"); if (!w) return;
+    if (e.target.closest("[data-regresar]")) { if (regresarCopia(D, n, z, w.dataset.v)) { op.cambiado(n, z); pintar(); } return; }
+    if (e.target.closest("[data-pasar]")) { if (pasarCopia(D, n, z, w.dataset.v)) { op.cambiado(n, z); pintar(); } }
   };
 }
 const textoDeck = (d) => {
-  const z = (zn) => d.cartas.filter((c) => c.z === zn).map((c) => `${c.q} ${c.n}`).join("\n");
+  const ver = (c) => { const f = impDe(c); return f ? ` (${String(f[1]).toUpperCase()}) ${f[2]}${f[3] === "f" ? " *F*" : f[3] === "e" ? " *E*" : ""}` : ""; };
+  const z = (zn) => agrupar(d.cartas.filter((c) => c.z === zn)).flatMap((g) => g.lineas).map((c) => `${c.q} ${c.n}${ver(c)}`).join("\n");      // las versiones de una carta, juntas
   const p = [];
   if (d.cartas.some((c) => c.z === "cmd")) p.push("Commander\n" + z("cmd"));
   p.push((p.length ? "Deck\n" : "") + z("main"));
@@ -274,6 +328,30 @@ const textoDeck = (d) => {
   return p.join("\n\n");
 };
 async function copiar(texto) { try { await navigator.clipboard.writeText(texto); return true; } catch { return false; } }
+// ---- link para ver un deck (#/d/...): el deck va comprimido en el propio link; no usa servidor y no caduca (igual que la app)
+const ZC = { main: "m", side: "s", cmd: "c", quizas: "q" }, ZD = { m: "main", s: "side", c: "cmd", q: "quizas" };
+export async function linkDeck(d) {
+  const dat = { v: 1, n: d.nombre || "Deck", f: d.formato || "", c: d.cartas.filter((c) => c.q > 0).map((c) => [c.q, c.n, ZC[c.z] || "m", ...(c.sid ? [c.sid, ACAB_L[c.acab || "nonfoil"] || "n"] : [])]) };
+  const b = new Uint8Array(await new Response(new Blob([JSON.stringify(dat)]).stream().pipeThrough(new CompressionStream("deflate-raw"))).arrayBuffer());
+  let bin = ""; for (let i = 0; i < b.length; i += 0x8000) bin += String.fromCharCode(...b.subarray(i, i + 0x8000));
+  return `${location.origin}${location.pathname}#/d/${btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")}`;
+}
+async function leerLinkDeck(txt) {
+  const b64 = String(txt).replace(/-/g, "+").replace(/_/g, "/"), bin = atob(b64 + "===".slice((b64.length + 3) % 4));
+  const u8 = Uint8Array.from(bin, (ch) => ch.charCodeAt(0));
+  const j = JSON.parse(await new Response(new Blob([u8]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).text());
+  if (!j || !Array.isArray(j.c)) throw new Error("link");
+  return { nombre: String(j.n || "Deck").slice(0, 60), formato: String(j.f || ""), cartas: j.c.filter((x) => Array.isArray(x) && x[1] && x[0] > 0).slice(0, 400)
+    .map(([q, n, zc, sid, L]) => ({ n: String(n), q: Math.min(999, Number(q) || 1), z: ZD[zc] || "main", ...(sid && /^[0-9a-f-]{36}$/i.test(sid) ? { sid, acab: ACAB_DE[L] || "nonfoil" } : {}) })) };
+}
+async function compartirLink(d, msg) {
+  if (!d || !d.cartas?.length) { if (msg) msg.textContent = t("dk.vacio"); return; }
+  try {
+    const u = await linkDeck(d);
+    if (await copiar(u)) { if (msg) msg.textContent = t("dk.link_copiado"); }
+    else if (msg) msg.innerHTML = `${esc(t("dk.link_aqui"))} <input class="dk-linktxt" readonly value="${esc(u)}" onfocus="this.select()">`;
+  } catch { if (msg) msg.textContent = t("dk.link_error"); }
+}
 
 // ---------------------------------------------------------------- META
 const M = { res: null, fmt: {}, cmd: null, vista: "arq", tienda: "tcg", sel: null };
@@ -408,7 +486,7 @@ export async function vistaMeta(app, fmtRuta) {
       const inf = d.info || {};
       det.innerHTML = `<h2>${esc(d.nombre)}</h2><p class="tenue">${esc(NOMBRE_FMT[d.formato] || d.formato)}${inf.evento ? " · " + esc(inf.evento) : ""}${inf.puesto ? ` · ${inf.puesto}°` : ""}${inf.jugador ? " · " + esc(inf.jugador) : ""}` +
         `${inf.fuente ? ` · <a href="${esc(inf.url || "#")}" target="_blank" rel="noopener">${esc(FUENTE[inf.fuente] || inf.fuente)}</a>` : ""}${inf.promedio ? " · " + esc(t("meta.promedio")) : ""}</p>
-        <div class="acciones-deck"><button type="button" class="primario" data-copiar-deck>${esc(t("meta.a_mis_decks"))}</button><button type="button" class="boton-fmt" data-texto>${esc(t("meta.copiar_lista"))}</button></div>
+        <div class="acciones-deck"><button type="button" class="primario" data-copiar-deck>${esc(t("meta.a_mis_decks"))}</button><button type="button" class="boton-fmt" data-texto>${esc(t("meta.copiar_lista"))}</button><button type="button" class="boton-fmt" data-link title="${esc(t("dk.link_ayuda"))}">${esc(t("dk.link"))}</button></div>
         <p id="meta-msg" class="tenue" role="status"></p>${htmlDeck(d, { tienda: M.tienda, tengo })}`;
       det.dataset.deck = JSON.stringify({ nombre: d.nombre, formato: d.formato, cartas: d.cartas, origen: d.origen || null });
       if (mover && matchMedia("(max-width: 899px)").matches) det.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -430,6 +508,7 @@ export async function vistaMeta(app, fmtRuta) {
     const tk = e.target.closest("[data-mt], [data-tienda]"); if (tk) { M.tienda = tk.dataset.mt || tk.dataset.tienda; app.querySelectorAll("[data-mt]").forEach((b) => b.classList.toggle("activo", b.dataset.mt === M.tienda)); pintar(); return; }
     const det = app.querySelector("#meta-det"), msg = app.querySelector("#meta-msg");
     if (e.target.closest("[data-texto]")) { const d = JSON.parse(det.dataset.deck || "null"); if (d && msg) msg.textContent = (await copiar(textoDeck(d))) ? t("meta.copiada") : t("meta.no_copiada"); return; }
+    if (e.target.closest("[data-link]")) { await compartirLink(JSON.parse(det.dataset.deck || "null"), msg); return; }
     if (e.target.closest("[data-faltan]")) {
       const d = JSON.parse(det.dataset.deck || "null"); if (!d) return;
       const P = preciosDeck(d.cartas, TENGO); if (msg) msg.textContent = (await copiar(P.faltan.map(([n, q]) => `${q} ${n}`).join("\n"))) ? t("meta.copiada") : t("meta.no_copiada"); return;
@@ -514,7 +593,7 @@ async function editor(app, id) {
       <select id="dk-fmt" aria-label="${esc(t("dk.formato"))}">${FMT_DECK.map((f) => `<option value="${f}"${f === E.deck.formato ? " selected" : ""}>${esc(NOMBRE_FMT[f])}</option>`).join("")}</select></div>
     <nav class="seg-web dk-pest" id="dk-pest"></nav>
     <div class="dk-cuerpo"><section id="dk-deck" class="dk-deck"></section><section id="dk-busca" class="dk-busca"></section></div>
-    <div class="acciones-deck"><button type="button" class="boton-fmt" data-acc="copiar">${esc(t("meta.copiar_lista"))}</button><button type="button" class="boton-fmt" data-acc="compartir">${esc(t("dk.compartir"))}</button>
+    <div class="acciones-deck"><button type="button" class="boton-fmt" data-acc="copiar">${esc(t("meta.copiar_lista"))}</button><button type="button" class="boton-fmt" data-acc="link" title="${esc(t("dk.link_ayuda"))}">${esc(t("dk.link"))}</button><button type="button" class="boton-fmt" data-acc="compartir">${esc(t("dk.compartir"))}</button>
       <button type="button" class="boton-fmt" data-acc="importar">${esc(t("dk.importar"))}</button><button type="button" class="boton-fmt peligro" data-acc="vaciar">${esc(t("dk.vaciar"))}</button><button type="button" class="boton-fmt peligro" data-acc="borrar">${esc(t("dk.borrar"))}</button></div>
     <p id="dk-msg" class="tenue" role="status"></p>`;
   const busca = app.querySelector("#dk-busca"), panel = app.querySelector("#dk-deck"), estado = app.querySelector("#dk-estado"), msg = app.querySelector("#dk-msg");
@@ -529,7 +608,7 @@ async function editor(app, id) {
   const htmlComandante = () => {
     if (!esCmd(E.deck.formato)) return "";
     const cmds = E.deck.cartas.filter((c) => c.z === "cmd"), id_ = identidad(E.deck);
-    const elegidos = cmds.map((c) => { const o = oraDe(c.n); return `<div class="dk-cmd-carta">${o?.sid ? `<img src="${esc(imgCarta(c.sid || o.sid, "normal"))}" alt="${esc(c.n)}" loading="lazy">` : ""}` +
+    const elegidos = cmds.map((c) => { const o = oraDe(c.n); return `<div class="dk-cmd-carta">${o?.sid ? `<button type="button" class="dk-cmd-img flipw" data-carta data-n="${esc(c.n)}" data-z="cmd" title="${esc(t("dk.cmd_version"))}"><img src="${esc(imgCarta(c.sid || o.sid, "normal"))}" alt="${esc(c.n)}" loading="lazy">${c.sid ? `<i class="dk-cmd-ver">◆ ${esc(etVer(c))}</i>` : ""}${btnVoltear(c.n, "span")}</button>` : ""}` +
       `<span class="n">${esc(c.n)}</span><button type="button" class="dk-x" data-quitar-cmd="${esc(c.n)}" aria-label="${esc(t("dk.quitar"))}" title="${esc(t("dk.quitar"))}">✕</button></div>`; }).join("");
     const pareja = cmds.length === 1 && oraDe(cmds[0].n)?.pareja;
     const buscador = !cmds.length || pareja ? `<input id="dk-qcmd" type="search" class="dk-q" placeholder="${esc(t(cmds.length ? "dk.buscar_pareja" : "dk.buscar_cmd"))}" autocomplete="off" spellcheck="false" value="${esc(E.qcmd)}"><div id="dk-cmd-res" class="dk-cmd-res"></div>` : "";
@@ -592,8 +671,8 @@ async function editor(app, id) {
   const tileHTML = (o, extra = "") => {
     const q = enDeck(o.n), cmd = esCmd(E.deck.formato), fv = E.resVer && E.resVer.get(o), sid = fv ? String(fv[0]).split(":")[0] : o.sid;
     if (fv) extra = `<span class="dk-tver">${esc(String(fv[1]).toUpperCase())} #${esc(fv[2])}</span>` + extra;
-    return `<div class="dk-tile${q ? " en" : ""}" data-n="${esc(o.n)}"${fv ? ` data-ver="${esc(String(fv[0]).split(":")[0])}:${esc(fv[3])}"` : ""}><button type="button" class="dk-img" data-add="main" aria-label="${esc(t("dk.agregar", { n: o.n }))}">` +
-      `<img src="${esc(imgCarta(sid, "normal"))}" alt="${esc(o.n)}" loading="lazy">${q ? `<b class="dk-en">×${q}</b>` : ""}</button>` +
+    return `<div class="dk-tile flipw${q ? " en" : ""}" data-n="${esc(o.n)}"${fv ? ` data-ver="${esc(String(fv[0]).split(":")[0])}:${esc(fv[3])}"` : ""}><button type="button" class="dk-img" data-add="main" aria-label="${esc(t("dk.agregar", { n: o.n }))}">` +
+      `<img src="${esc(imgCarta(sid, "normal"))}" alt="${esc(o.n)}" loading="lazy">${q ? `<b class="dk-en">×${q}</b>` : ""}${btnVoltear(o.n, "span")}</button>` +
       `${q ? `<button type="button" class="dk-menos" data-menos="1" aria-label="${esc(t("dk.quitar"))}" title="${esc(t("dk.quitar"))}">−</button>` : ""}` +
       `<div class="dk-tile-pie"><span class="num">${pesos2(fv ? precioImp(fv, E.tienda) : precioNombre(o.n, E.tienda))}</span>${extra}` +
       `<button type="button" class="dk-tvers" data-vers title="${esc(t("dk.elegir_version"))}" aria-label="${esc(t("dk.elegir_version"))}">◆</button>` +
@@ -651,14 +730,12 @@ async function editor(app, id) {
     const o = oraDe(nombre) || { n: nombre, sid: null }; const tmp = document.createElement("div"); tmp.innerHTML = tileHTML(o, tl.querySelector(".dk-tile-pie .tenue")?.outerHTML || ""); tl.replaceWith(tmp.firstElementChild);
   });
   const sucio = () => { E.sucio = true; estado.textContent = t("dk.sin_guardar"); clearTimeout(E.t); E.t = setTimeout(guardar, 1000); };
-  const cambiarLinea = (c, dq) => {                   // suma dq copias a ESA linea (esa version)
-    const D = E.deck; if (!c) return;
-    c.q = Math.max(0, Math.min(c.z === "cmd" ? 1 : 999, c.q + dq));
-    D.cartas = D.cartas.filter((x) => x.q > 0); sucio();
-    if (c.z === "cmd") { E.qcmd = ""; E.edh = null; }
-    pintarDeck(); if (c.z === "cmd") { busca.innerHTML = ""; pintarBusca(); } else actualizarTiles(c.n);
+  const trasReparto = (n, z) => {                    // despues de cambiar la hoja o una fila: guardar y repintar
+    sucio();
+    if (z === "cmd" && !E.deck.cartas.some((x) => x.z === "cmd" && x.n === n)) { E.qcmd = ""; E.edh = null; pintarDeck(); busca.innerHTML = ""; pintarBusca(); return; }
+    pintarDeck(); actualizarTiles(n);
   };
-  const lineaDe = (el) => E.deck.cartas.find((y) => y.n === el.dataset.n && y.z === el.dataset.z && vDe(y) === (el.dataset.v || "")) || E.deck.cartas.find((y) => y.n === el.dataset.n && y.z === el.dataset.z);
+  const hojaDe = (n, z) => abrirHojaCarta(E.deck, n, z, { editable: true, tienda: E.tienda, cambiado: trasReparto });
   const cambiar = (n, z, dq, extra) => {              // con extra.sid: de esa version, en su propia linea
     const o = oraDe(n), nombre = o ? o.n : n, D = E.deck;
     if (z === "cmd" && dq > 0) {
@@ -690,12 +767,10 @@ async function editor(app, id) {
     const pc = e.target.closest("[data-poner-cmd]"); if (pc) { cambiar(pc.dataset.ponerCmd, "cmd", 1); return; }
     const qc = e.target.closest("[data-quitar-cmd]"); if (qc) { cambiar(qc.dataset.quitarCmd, "cmd", -1); return; }
     const mn = e.target.closest("[data-menos]"); if (mn) { const n = mn.closest(".dk-tile").dataset.n, c = E.deck.cartas.find((x) => x.n === (oraDe(n)?.n || n) && x.z === "main") || E.deck.cartas.find((x) => x.n === (oraDe(n)?.n || n) && x.z !== "cmd"); if (c) cambiar(c.n, c.z, -1); return; }
-    const vs = e.target.closest(".dk-tile [data-vers]"); if (vs) { const n = vs.closest(".dk-tile").dataset.n;      // elegir la version antes de agregarla
-      abrirHojaCarta(E.deck, oraDe(n)?.n || n, "main", { editable: true, tienda: E.tienda, cambiar, cambiarLinea,
-        cambiado: () => { sucio(); pintarDeck(); } }); return; }
+    const vs = e.target.closest(".dk-tile [data-vers]"); if (vs) { const n = vs.closest(".dk-tile").dataset.n; hojaDe(oraDe(n)?.n || n, "main"); return; }      // elegir la version antes de agregarla
     const a = e.target.closest("[data-add]"); if (a) { const tl = a.closest(".dk-tile"), [sid, ac] = (tl.dataset.ver || "").split(":"); cambiar(tl.dataset.n, a.dataset.add, 1, sid ? { sid, acab: ACAB_DE[ac] || "nonfoil" } : undefined); return; }
-    const x = e.target.closest(".dkl [data-x]"); if (x) { const c = lineaDe(x.closest(".dkl")); if (c) cambiarLinea(c, -c.q); return; }
-    const q = e.target.closest(".dkl [data-q]"); if (q) { const c = lineaDe(q.closest(".dkl")); if (c) cambiarLinea(c, Number(q.dataset.q)); return; }
+    const x = e.target.closest(".dkl [data-x]"); if (x) { const l = x.closest(".dkl"); E.deck.cartas = E.deck.cartas.filter((y) => !(y.n === l.dataset.n && y.z === l.dataset.z)); trasReparto(l.dataset.n, l.dataset.z); return; }
+    const q = e.target.closest(".dkl [data-q]"); if (q) { const l = q.closest(".dkl"); grupoMas(E.deck, l.dataset.n, l.dataset.z, Number(q.dataset.q)); trasReparto(l.dataset.n, l.dataset.z); return; }
     const col = e.target.closest("[data-col]"); if (col) { if (esCmd(E.deck.formato) && identidad(E.deck) != null) return; const v = col.dataset.col; E.cols.has(v) ? E.cols.delete(v) : E.cols.add(v); pintarBusca(); return; }
     const tp = e.target.closest("[data-tp]"); if (tp) { const v = tp.dataset.tp; E.tipos.has(v) ? E.tipos.delete(v) : E.tipos.add(v); pintarBusca(); return; }
     const rz = e.target.closest("[data-rar]"); if (rz) { const v = rz.dataset.rar; E.rar.has(v) ? E.rar.delete(v) : E.rar.add(v); pintarBusca(); return; }
@@ -703,12 +778,11 @@ async function editor(app, id) {
     const cm = e.target.closest("[data-cmc]"); if (cm) { const v = Number(cm.dataset.cmc); E.cmc = E.cmc === v ? null : v; pintarBusca(); return; }
     const tk = e.target.closest("[data-tienda]"); if (tk) { E.tienda = tk.dataset.tienda; pintarDeck(); return; }
     const dv = e.target.closest("[data-dkvista]"); if (dv) { ponerVistaDk(dv.dataset.dkvista); pintarDeck(); return; }
-    const vc = e.target.closest("[data-carta]"); if (vc) { const l = vc.closest("[data-n]");
-      if (l) abrirHojaCarta(E.deck, l.dataset.n, l.dataset.z, { editable: true, tienda: E.tienda, cambiar, cambiarLinea,
-        cambiado: () => { E.sucio = true; estado.textContent = t("dk.sin_guardar"); clearTimeout(E.t); E.t = setTimeout(guardar, 1000); pintarDeck(); } }, l.dataset.v || ""); return; }
+    const vc = e.target.closest("[data-carta]"); if (vc) { const l = vc.closest("[data-n]"); if (l) hojaDe(l.dataset.n, l.dataset.z); return; }
     if (e.target.closest("[data-faltan]")) { const P = preciosDeck(E.deck.cartas, tengo); msg.textContent = (await copiar(P.faltan.map(([n, q_]) => `${q_} ${n}`).join("\n"))) ? t("meta.copiada") : t("meta.no_copiada"); return; }
     const ac = e.target.closest("[data-acc]"); if (!ac) return;
     if (ac.dataset.acc === "copiar") { msg.textContent = (await copiar(textoDeck(E.deck))) ? t("meta.copiada") : t("meta.no_copiada"); }
+    else if (ac.dataset.acc === "link") await compartirLink(E.deck, msg);
     else if (ac.dataset.acc === "vaciar") {
       const n = E.deck.cartas.filter((c) => c.z !== "cmd").reduce((s_, c) => s_ + c.q, 0); if (!n) { msg.textContent = t("dk.ya_vacio"); return; }
       if (ac.dataset.seguro !== "1") { ac.dataset.seguro = "1"; ac.textContent = t("dk.vaciar_seguro", { n }); setTimeout(() => { ac.dataset.seguro = ""; ac.textContent = t("dk.vaciar"); }, 4000); return; }
@@ -733,19 +807,27 @@ async function editor(app, id) {
       busca.innerHTML = `<textarea id="dk-imp" class="dk-imp" placeholder="1 Sol Ring&#10;..."></textarea><div class="acciones-deck"><button type="button" class="primario" data-imp>${esc(t("dk.importar"))}</button></div>`;
     }
   };
-  app.addEventListener("click", async (e) => {
+  if (app._dkClic) app.removeEventListener("click", app._dkClic);      // al abrir otro deck no se juntan dos (importar contaba doble)
+  app.addEventListener("click", app._dkClic = async (e) => {
     const c = e.target.closest("[data-copiar-txt]"); if (c) { msg.textContent = (await copiar(c.dataset.copiarTxt)) ? t("meta.copiada") : t("meta.no_copiada"); return; }
     if (e.target.closest("[data-deshacer]") && E.deshacer) { E.deck.cartas = E.deshacer; E.deshacer = null; sucio(); pintarDeck(); busca.innerHTML = ""; pintarBusca(); msg.textContent = t("dk.regresadas"); return; }
     if (e.target.closest("[data-imp]")) {
-      const txt = app.querySelector("#dk-imp").value; let z = "main", n = 0;
+      const txt = app.querySelector("#dk-imp").value; let z = "main", n = 0; const leidas = [];
       for (const raw of txt.replace(/\r/g, "").split("\n")) {
-        const l = raw.trim(); if (!l) { if (n) z = "side"; continue; }
+        const l = raw.trim(); if (!l) { if (leidas.length) z = "side"; continue; }
         const h = l.toLowerCase().replace(/[:\s]+$/, "");
         if (/^(commander|comandante)$/.test(h)) { z = "cmd"; continue; } if (/^(sideboard|side)$/.test(h)) { z = "side"; continue; } if (/^(deck|main|mainboard)$/.test(h)) { z = "main"; continue; }
-        const m = l.match(/^(?:SB:\s*)?(\d+)\s*x?\s+(.+?)(?:\s+\([A-Za-z0-9]{2,6}\)(?:\s+[\w★-]+)?)?(?:\s+\*[FE]\*)?$/i);
-        const nombre = m ? m[2] : l, q = m ? Number(m[1]) : 1, o = oraDe(nombre);
-        const ya = E.deck.cartas.find((x) => x.n === (o ? o.n : nombre) && x.z === z);
-        if (ya) ya.q += q; else E.deck.cartas.push({ n: o ? o.n : nombre, q, z }); n++;
+        const m = l.match(/^(?:SB:\s*)?(\d+)\s*x?\s+(.+?)(?:\s+\(([A-Za-z0-9]{2,6})\)(?:\s+([\w★-]+))?)?(?:\s+\*([FE])\*)?$/i);
+        const nombre = m ? m[2] : l, o = oraDe(nombre);
+        leidas.push({ n: o ? o.n : nombre, q: m ? Number(m[1]) : 1, z, set: m && m[3] ? m[3].toLowerCase() : null, num: m && m[4] ? m[4].toLowerCase() : null, L: m && m[5] ? m[5].toLowerCase() : "n" });
+      }
+      await asegurarNombres(leidas);
+      for (const x of leidas) {
+        let ver = null;                                 // la impresion exacta si la lista la trae
+        if (x.set) { const g = nombres().get(x.n), fs = g ? g[2].map((i) => datos().buscar.imp[i]).filter((f) => f && String(f[1]).toLowerCase() === x.set && (!x.num || String(f[2]).toLowerCase() === x.num)) : [];
+          const f = fs.find((y) => y[3] === x.L) || fs[0]; if (f) ver = { sid: String(f[0]).split(":")[0], acab: ACAB_DE[f[3]] || "nonfoil" }; }
+        const v = ver ? `${ver.sid}|${ver.acab}` : "", ya = E.deck.cartas.find((y) => y.n === x.n && y.z === x.z && vDe(y) === v);
+        if (ya) ya.q += x.q; else E.deck.cartas.push({ n: x.n, q: x.q, z: x.z, ...(ver || {}) }); n++;
       }
       E.sucio = true; await asegurarNombres(E.deck.cartas); await guardar(); busca.innerHTML = ""; E.pest = "deck"; pintarDeck(); pintarBusca(); msg.textContent = t("dk.importadas", { n });
     }
@@ -771,4 +853,41 @@ export async function agregarAlDeck(id, cartas) {            // [{n, sid, acab, 
 // ---------------------------------------------------------------- un deck recibido por codigo (#/s/CODIGO)
 export async function guardarDeckRecibido(deck) {
   return crearDeck({ ...deck, id: null });
+}
+
+// ---------------------------------------------------------------- un deck abierto por link (#/d/...): cualquiera lo ve, sin cuenta
+// Precio total por tienda, la lista por tipo de carta (cantidad, nombre, coste, precio) o la galeria; tocar una carta = sus versiones.
+export async function vistaDeckLink(app, dato) {
+  document.body.classList.remove("en-portada");
+  document.body.classList.add("ancho");
+  app.innerHTML = `<p class="tenue">${esc(t("dk.cargando"))}</p>`;
+  let d;
+  try { d = await leerLinkDeck(dato); } catch { app.innerHTML = `<h1 class="titulo-vista">Deck</h1><p class="error">${esc(t("dk.link_malo"))}</p><a class="boton-vacio" href="#/meta">META</a>`; return; }
+  await cargarOraculo().catch(() => null);
+  await asegurarNombres(d.cartas);
+  const tengo = await cargarTengo();
+  document.title = `${d.nombre} · Stack`;
+  const st = { tienda: "tcg" };
+  const nC = d.cartas.filter((c) => c.z !== "quizas").reduce((s_, c) => s_ + c.q, 0);
+  const pintar = () => {
+    app.innerHTML = `<article class="dk-pub"><h1 class="titulo-vista">${esc(d.nombre)}</h1>
+      <p class="tenue">${esc(NOMBRE_FMT[d.formato] || d.formato || "")}${d.formato ? " · " : ""}${nC} ${esc(t("dk.cartas"))} · ${esc(t("dk.link_nota"))}</p>
+      <div class="acciones-deck"><button type="button" class="primario" data-guardar>${esc(t("dk.link_guardar"))}</button><button type="button" class="boton-fmt" data-texto>${esc(t("meta.copiar_lista"))}</button><button type="button" class="boton-fmt" data-link>${esc(t("dk.link"))}</button></div>
+      <p id="dk-msg" class="tenue" role="status"></p>
+      <section class="meta-det">${htmlDeck(d, { tienda: st.tienda, tengo })}</section></article>`;
+  };
+  pintar();
+  app.onclick = async (e) => {
+    const msg = app.querySelector("#dk-msg");
+    const tk = e.target.closest("[data-tienda]"); if (tk) { st.tienda = tk.dataset.tienda; pintar(); return; }
+    const dv = e.target.closest("[data-dkvista]"); if (dv) { ponerVistaDk(dv.dataset.dkvista); pintar(); return; }
+    const vc = e.target.closest("[data-carta]"); if (vc) { const l = vc.closest("[data-n]"); if (l) abrirHojaCarta(d, l.dataset.n, l.dataset.z, { tienda: st.tienda }); return; }
+    if (e.target.closest("[data-texto]")) { msg.textContent = (await copiar(textoDeck(d))) ? t("meta.copiada") : t("meta.no_copiada"); return; }
+    if (e.target.closest("[data-link]")) { await compartirLink(d, msg); return; }
+    if (e.target.closest("[data-faltan]")) { const P = preciosDeck(d.cartas, tengo); msg.textContent = (await copiar(P.faltan.map(([n, q]) => `${q} ${n}`).join("\n"))) ? t("meta.copiada") : t("meta.no_copiada"); return; }
+    if (e.target.closest("[data-guardar]")) {
+      if (!cuenta.sesion()) { msg.innerHTML = `${esc(t("dk.entra"))} <a href="#/cuenta">${esc(t("cuenta.entrar"))}</a>`; return; }
+      try { const id = await crearDeck({ ...d, origen: { tipo: "link" } }); location.hash = `#/decks/${id}`; } catch { msg.textContent = t("dk.err_guardar"); }
+    }
+  };
 }
