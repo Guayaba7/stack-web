@@ -11,6 +11,13 @@
 //   4) si el nombre no se deja leer (otro idioma, letra rara), lee la caja de TEXTO DE REGLAS y la compara con el
 //      texto oficial de los candidatos visuales (de Scryfall); si dos cartas distintas empatan, no adivina.
 // Una vez fijada una carta no cambia sola: solo cambia si se lee con seguridad otro nombre o si la carta sale del recuadro.
+//
+// 0.9.7: reconocimiento por ARTE, como un reconocimiento de caras donde la cara es la ilustracion. Hay un segundo indice
+// con una huella por ilustracion de TODAS las impresiones (tambien las de menos de $2, las tierras full art y las impresas
+// en phyrexiano o klingon). Cada cuadro se recorta el arte de la carta (el recuadro normal y el alto de las full art) y se
+// compara contra ese indice: si el arte apunta con claridad a una sola carta, se fija sin necesidad de leer el texto.
+// La carta puede estar de cabeza o acostada: se prueban las orientaciones posibles y gana la que mejor coincide; con la
+// orientacion ya sabida, el nombre y el codigo de coleccion tambien se leen derechos.
 import { DATOS_URL } from "./config.js";
 import { datos, cargarUniverso, universoListo } from "./datos.js";
 import { normalizar } from "./buscar.js";
@@ -45,9 +52,27 @@ const SOLO_IMAGEN_TRAS_MS = 2500;                          // ... y solo despues
 const REFLEJO = 0.05;                                      // fraccion de pixeles quemados en la barra del nombre = hay reflejo
 const VISUAL_DUDOSO = 0.55;                                // la mejor edicion con huella se parece poco: puede ser una de < $2
 const VISUAL_FUERTE = 0.78;                                // la imagen apunta con claridad a una carta
+// Arte (0.9.7). Medido con fotos simuladas de celular contra 12,000 ilustraciones: con >= 0.70 y 0.05 de ventaja sobre
+// cualquier otro nombre acierta ~98% en un solo cuadro; se piden 2 cuadros y un poco mas por el indice completo (~51,000).
+const ARTE_RECORTES = [{ x0: 0.08, y0: 0.115, x1: 0.918, y1: 0.553 },  // recuadro del arte de una carta normal
+  { x0: 0.08, y0: 0.115, x1: 0.918, y1: 0.832 }];                       // arte alto de las tierras y cartas full art
+const ARTE_VENTANA = 3;                                    // cuadros que se promedian
+const ARTE_SEGURO = 0.72;                                  // parecido minimo para fijar solo por el arte
+const ARTE_MARGEN = 0.06;                                  // ventaja minima sobre el mejor arte de OTRO nombre
+const ARTE_ACUERDO = 0.62;                                 // nombre medio leido + arte del mismo nombre = se fija
+const GIRO_MARGEN = 0.04;
+// Votacion (0.9.7): cada pista da de 0 a 1 punto a una carta (nombre leido, arte, huella de la carta completa). Se fija
+// cuando una carta junta VOTOS_FIJAR con al menos dos pistas a favor y le saca VOTOS_VENTAJA a la siguiente.
+const VOTOS_FIJAR = 1.15, VOTOS_VENTAJA = 0.5;
+const CORREGIR_MS = 2500;
+const OTRA_VERSION_SIM = 0.86;                             // huella de la carta completa contra la fijada: por debajo, es otra copia                                  // tiempo en que otra edicion CORRIGE la carta fijada; despues es OTRA carta
+const OTRA_VERSION_ARTE = 0.06;                            // el arte de otra version del mismo nombre gana por esto: es otra carta
+// Idioma impreso en la linea de coleccion -> idioma de Scryfall
+const IDIOMA_CODIGO = { EN: "en", ES: "es", SP: "es", FR: "fr", DE: "de", IT: "it", PT: "pt", JP: "ja", JA: "ja", PH: "ph", TLH: "tlh", KL: "tlh", KO: "ko", RU: "ru", CS: "zhs", CT: "zht" };                                  // una orientacion gana cuando su arte se parece esto mas
 const QUIETA = 7;                                          // diferencia media (0-255) entre cuadros: la carta no se movio
 
 let ort = null, sesion = null, indice = null, lector = null, letras = null, nombres = null;
+let arte = null;                                              // indice del arte (0.9.7) o null con datos viejos
 let lectorJa = null, nombresJa = null, cargandoJa = null;     // lector y nombres en japones
 let corriendo = false, video = null, flujo = null, alResultado = null, alEstado = null;
 let estado = nuevoEstado();
@@ -76,6 +101,10 @@ function nuevoEstado() {
     ultimaQ: null,
     reflejos: 0,            // lecturas seguidas con reflejo en el nombre
     mini: null,             // miniatura del cuadro anterior (para no recalcular la huella si la carta no se movio)
+    arte: [],               // puntajes de arte de los ultimos cuadros (0.9.7)
+    giro: null,             // orientacion de la carta en la foto: 0 derecha, 2 de cabeza, 1 y 3 acostada (null = sin saber)
+    giroVotos: [0, 0, 0, 0],
+    pista: null,            // lo que dice el arte: {grupo, s, s2, p}
   };
 }
 
@@ -174,6 +203,18 @@ export async function preparar(progreso = () => {}) {
     indice.vistas = new Map();                                    // grupo -> cuantas impresiones ya estan en porSid
     d.buscar.nombres.forEach((_, grupo) => sumarGrupo(grupo));
     nombres = prepararNombres(d.buscar);
+    if (v.arte) {                                                 // 0.9.7: indice del arte (si falla, el escaner sigue como antes)
+      try {
+        const [ma, ba] = await Promise.all([fetch(`${base}arte.json`).then((r) => r.json()), fetch(`${base}arte.bin`).then((r) => r.arrayBuffer())]);
+        const grupoDe = new Map(d.buscar.nombres.map((f, g) => [f[0], g]));
+        const nombreG = Int32Array.from(ma.nombres, (n) => grupoDe.get(n) ?? -1);
+        arte = { dims: ma.dims, vec: new Int8Array(ba), n: ma.e.length, grupo: Int32Array.from(ma.e, ([ni]) => nombreG[ni]),
+          pref: ma.e.map(([, p]) => p.split(" ")), nombreDe: Int32Array.from(ma.e, ([ni]) => ni) };
+        arte.porGrupo = new Map();
+        for (let j = 0; j < arte.n; j++) { const g = arte.grupo[j]; if (g < 0) continue; if (!arte.porGrupo.has(g)) arte.porGrupo.set(g, []); arte.porGrupo.get(g).push(j); }
+        anotar("arte", arte.n);
+      } catch (e) { arte = null; anotar("arte", "sin indice", String(e)); }
+    }
     nombresJa = [];
     d.buscar.nombres.forEach((fila, grupo) => { for (const t of (fila[3] || "").split("|")) if (t.length >= 2) nombresJa.push({ t, grupo }); });
   }
@@ -282,7 +323,10 @@ function esquinas(img, W, H) {
   if (!c) return null;
   const dist = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]);
   const ancho = (dist(c[0], c[1]) + dist(c[3], c[2])) / 2, alto = (dist(c[0], c[3]) + dist(c[1], c[2])) / 2;
-  if (!(alto > 0) || ancho / alto < 0.55 || ancho / alto > 0.9 || ancho * alto < 0.3 * W * H) return null;
+  if (!(alto > 0) || ancho * alto < 0.3 * W * H) return null;
+  const prop = ancho / alto;
+  if (prop > 1.11 && prop < 1.82) { c.acostada = true; return c; }   // 0.9.7: carta acostada (sin mica: se prueba de lado)
+  if (prop < 0.55 || prop > 0.9) return null;
   // Carta en mica: otra orilla paralela 1-9% mas adentro en los lados y arriba. No se sabe si es la carta o el borde
   // negro de una carta sin mica, asi que se guarda como segunda opcion y el lector de texto prueba las dos.
   if (ri.izq && ri.der && ri.arr) {
@@ -304,6 +348,7 @@ function cuadro4(r, esc) {
   if (c.some(([x, y]) => !isFinite(x) || !isFinite(y))) return null;
   const dist = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]);
   const ancho = (dist(c[0], c[1]) + dist(c[3], c[2])) / 2, alto = (dist(c[0], c[3]) + dist(c[1], c[2])) / 2;
+  if (ancho > alto) return c;                                   // acostada: no se reconstruye (no se sabe cual lado es el de abajo)
   // Con borde negro sobre mesa oscura, la orilla de abajo suele confundirse con el final de la caja de texto.
   // Arriba y los lados salen bien (ahi se lee el nombre): si la proporcion no es la de una carta (63x88 mm),
   // la orilla de abajo se reconstruye con el ancho de arriba siguiendo la direccion de los lados.
@@ -420,6 +465,67 @@ async function huella(cartaImg) {
   return Float32Array.from(v, (x) => x * s);
 }
 
+// ---------------------------------------------------------------- arte (0.9.7)
+// Esquinas de la carta segun su orientacion: r = 0 derecha, 1 acostada con la parte de arriba a la izquierda, 2 de cabeza, 3.
+function orientar(c, r) {
+  if (!r) return c;
+  const o = [0, 1, 2, 3].map((i) => c[(i - r + 4) % 4]);
+  if (c.interior) o.interior = orientar(c.interior, r);
+  if (c.acostada) o.acostada = true;
+  return o;
+}
+// Un recorte en color de la carta (en fracciones), directo de la foto, a LADO_RED x LADO_RED.
+function recorteColor(img, W, H, c, r) {
+  const m = homografia(c), out = ctxRed.createImageData(LADO_RED, LADO_RED), o = out.data;
+  for (let v = 0; v < LADO_RED; v++) for (let u = 0; u < LADO_RED; u++) {
+    const X = (r.x0 + (u + 0.5) / LADO_RED * (r.x1 - r.x0)) * CW, Y = (r.y0 + (v + 0.5) / LADO_RED * (r.y1 - r.y0)) * CH;
+    const z = m[6] * X + m[7] * Y + 1;
+    let sx = (m[0] * X + m[1] * Y + m[2]) / z - 0.5, sy = (m[3] * X + m[4] * Y + m[5]) / z - 0.5;
+    sx = Math.min(W - 1.001, Math.max(0, sx)); sy = Math.min(H - 1.001, Math.max(0, sy));
+    const x0 = sx | 0, y0 = sy | 0, fx = sx - x0, fy = sy - y0, j = (v * LADO_RED + u) * 4;
+    const i00 = (y0 * W + x0) * 4, i01 = i00 + 4, i10 = i00 + W * 4, i11 = i10 + 4;
+    for (let k = 0; k < 3; k++) o[j + k] = img[i00 + k] * (1 - fx) * (1 - fy) + img[i01 + k] * fx * (1 - fy) + img[i10 + k] * (1 - fx) * fy + img[i11 + k] * fx * fy;
+    o[j + 3] = 255;
+  }
+  return out;
+}
+async function huellaDe(im) {                                    // ImageData LADO_RED x LADO_RED -> huella normalizada
+  const px = im.data, n = LADO_RED * LADO_RED, t = new Float32Array(3 * n);
+  for (let i = 0; i < n; i++) for (let k = 0; k < 3; k++) t[k * n + i] = (px[i * 4 + k] / 255 - MEAN[k]) / STD[k];
+  const salida = await sesion.run({ pixel_values: new ort.Tensor("float32", t, [1, 3, LADO_RED, LADO_RED]) });
+  const v = Object.values(salida)[0].data;
+  let s = 0; for (let i = 0; i < v.length; i++) s += v[i] * v[i];
+  s = 1 / Math.sqrt(s || 1);
+  return Float32Array.from(v, (x) => x * s);
+}
+// Puntaje de cada arte del indice: el mejor de varias huellas (los recortes de una misma orientacion).
+function puntajesArte(qs) {
+  const { dims, vec, n } = arte, out = new Float32Array(n).fill(-1);
+  for (const q of qs) for (let j = 0; j < n; j++) {
+    let s = 0; const o = j * dims;
+    for (let k = 0; k < dims; k++) s += q[k] * vec[o + k];
+    s /= 127; if (s > out[j]) out[j] = s;
+  }
+  return out;
+}
+const mejorDe = (p) => { let m = -1; for (let j = 0; j < p.length; j++) if (p[j] > m) m = p[j]; return m; };
+// Con la ventana del arte: el mejor nombre, su puntaje y el del mejor arte de OTRO nombre.
+function pistaArte() {
+  const v = estado.arte; if (!v.length) return null;
+  const p = new Float32Array(v[0].length); for (const s of v) for (let j = 0; j < p.length; j++) p[j] += s[j] / v.length;
+  let j1 = -1; for (let j = 0; j < p.length; j++) if (arte.grupo[j] >= 0 && (j1 < 0 || p[j] > p[j1])) j1 = j;
+  if (j1 < 0) return null;
+  const n1 = arte.nombreDe[j1]; let s2 = -1;
+  for (let j = 0; j < p.length; j++) if (arte.nombreDe[j] !== n1 && p[j] > s2) s2 = p[j];
+  return { grupo: arte.grupo[j1], s: p[j1], s2, p };
+}
+// Puntaje de arte de cada impresion de un nombre (por los primeros 8 caracteres de su id de Scryfall).
+function arteDeSids(grupo, sids, p) {
+  const out = new Map(); if (!arte || !p) return out;
+  for (const j of arte.porGrupo.get(grupo) || []) for (const pre of arte.pref[j]) for (const sid of sids) if (sid.startsWith(pre)) out.set(sid, Math.max(out.get(sid) ?? -1, p[j]));
+  return out;
+}
+
 function puntajes(q) {
   const { dims, vec } = indice, n = vec.length / dims, out = new Float32Array(n);
   for (let j = 0; j < n; j++) {
@@ -477,6 +583,11 @@ function parecido(leido, nombre) {
     const corto = leido.slice(0, nombre.length);
     mejor = Math.max(mejor, (1 - distancia(corto, nombre, tope) / nombre.length) - 0.04);
   }
+  // 0.9.7: nombre largo cortado a la derecha (pasa en espanol, aleman...): contra el inicio del nombre, con castigo
+  if (leido.length >= 8 && leido.length < nombre.length - 2 && leido.length >= nombre.length * 0.55) {
+    const ini = nombre.slice(0, leido.length), t2 = Math.floor(leido.length * 0.3);
+    mejor = Math.max(mejor, (1 - distancia(leido, ini, t2) / leido.length) - 0.08);
+  }
   return mejor;
 }
 
@@ -489,7 +600,7 @@ function emparejarNombre(texto, ja = false) {
   if (ja && !/[\u3040-\u30ff\u3400-\u9fff]/.test(leido)) return null;   // sin kana ni kanji no es un nombre japones
   const porGrupo = new Map();                                   // mejor parecido por carta
   for (const { t, grupo } of ja ? nombresJa : nombres) {
-    if (Math.abs(t.length - leido.length) > Math.max(6, leido.length * 0.5)) continue;
+    if (t.length - leido.length > Math.max(6, t.length * 0.45) || leido.length - t.length > Math.max(6, leido.length * 0.5)) continue;
     const s = parecido(leido, t);
     if (s > 0.5 && s > (porGrupo.get(grupo) ?? 0)) porGrupo.set(grupo, s);
   }
@@ -528,6 +639,7 @@ function visualDeGrupo(p, grupo) {
   return m;
 }
 function contradice(r) {
+  if (estado.pista?.grupo === r.grupo && estado.pista.s >= ARTE_ACUERDO) return null;   // 0.9.7: el arte confirma lo leido
   const p = promedio();
   if (!p) return null;
   const propio = visualDeGrupo(p, r.grupo);
@@ -547,7 +659,33 @@ function elegirEdicion(grupo) {
   const sids = [...new Set(imps.map((i) => d.buscar.imp[i][0].split(":")[0]))];
   const p = promedio();
   if (!sids.length) return null;
-  const conPuntaje = sids.map((sid) => [sid, p && indice.pos.has(sid) ? p[indice.pos.get(sid)] : -1]).sort((x, y) => y[1] - x[1]);
+  let conPuntaje = sids.map((sid) => [sid, p && indice.pos.has(sid) ? p[indice.pos.get(sid)] : -1]).sort((x, y) => y[1] - x[1]);
+  // 0.9.7: si el arte se reconoce, manda el arte (cubre TODAS las impresiones); la huella de la carta completa desempata
+  const pa = arte && estado.arte.length ? (estado.pista || pistaArte()) : null;
+  const porArte = pa ? arteDeSids(grupo, sids, pa.p) : new Map();
+  if (porArte.size) {
+    const tope = Math.max(...porArte.values());
+    if (tope >= ARTE_ACUERDO) {
+      const deArte = (sid) => porArte.get(sid) ?? -1;
+      // mismo arte (reimpresiones, promos, arte extendido): desempata la huella de la carta completa y luego la impresion normal
+      // (sin promo, numero sin letras, el numero mas bajo); el codigo de coleccion la corrige despues si se deja leer
+      const fila = new Map(imps.map((i) => d.buscar.imp[i]).map((f) => [String(f[0]).split(":")[0], f]));
+      const comun = (sid) => { const f = fila.get(sid); if (!f) return 0; const set = String(f[1]), num = String(f[2]); return (/^\d+$/.test(num) ? 2 : 0) + (/^p[a-z0-9]{3}$/i.test(set) ? 0 : 1); };
+      const numero = (sid) => parseInt(String(fila.get(sid)?.[2] ?? "99999"), 10) || 99999;
+      // Primero el arte. Entre las del MISMO arte (reimpresiones, promos, arte extendido) va la de huella de carta completa
+      // mas parecida (como antes) y luego la impresion normal, pero con aviso (⚠): medido, la huella completa no separa bien
+      // el arte extendido del normal ni la promo de la normal; decide el codigo de coleccion o la persona.
+      const vis = new Map(conPuntaje);
+      conPuntaje.sort((x, y) => (deArte(y[0]) - deArte(x[0])) || (y[1] - x[1]));
+      const mismas = conPuntaje.filter(([sid]) => tope - deArte(sid) < IGUALES).map(([sid]) => sid);
+      const resto = conPuntaje.map(([sid]) => sid).filter((sid) => !mismas.includes(sid));
+      const porNormal = (a, b) => (comun(b) - comun(a)) || (numero(a) - numero(b));
+      const ord = mismas.slice().sort((a, b) => (vis.get(b) - vis.get(a)) || porNormal(a, b));   // como antes: la de huella mas parecida
+      const claro = mismas.length === 1;                         // mismo arte en varias: siempre con aviso hasta leer el codigo
+      conPuntaje = [...ord, ...resto].map((sid) => [sid, vis.get(sid)]);
+      return { sid: ord[0], parecidas: mismas, todas: [...ord, ...resto], dudosa: !claro, puntaje: tope, porArte: true };
+    }
+  }
   const top = conPuntaje[0];
   const parecidas = conPuntaje.filter(([, s]) => top[1] - s < IGUALES).map(([sid]) => sid);
   // Las impresiones de menos de $2 no tienen huella visual: si la mejor con huella se parece poco, la buena puede ser
@@ -559,11 +697,20 @@ function elegirEdicion(grupo) {
 
 async function fijar(grupo, por) {
   const est = estado;
+  if (est.fijando === grupo || est.fijada?.grupo === grupo) return;   // 0.9.7: el arte y el nombre llegaron juntos
+  est.fijando = grupo;
   await conUniverso(grupo);                                       // ya suele estar: se pide al primer voto del nombre
   if (!corriendo || est !== estado) return;
   const ed = elegirEdicion(grupo);
   if (!ed) return;
-  estado.fijada = { grupo, sid: ed.sid, desde: performance.now(), por, q: null, dudosa: ed.dudosa };   // q: el siguiente cuadro
+  const forzada = est.forzarSid && ed.todas.includes(est.forzarSid) ? est.forzarSid : null;   // 0.9.7: otra version ya identificada
+  if (!forzada && est.excluirSid && ed.sid === est.excluirSid && ed.todas.length > 1) {   // la nueva copia no es la impresion anterior
+    ed.todas = [...ed.todas.filter((x) => x !== est.excluirSid), est.excluirSid]; ed.sid = ed.todas[0]; ed.dudosa = true;
+  }
+  if (forzada) { ed.sid = forzada; ed.todas = [forzada, ...ed.todas.filter((x) => x !== forzada)]; ed.dudosa = false; }
+  // dos versiones del mismo nombre que el arte no separa (y sin codigo): se avisa para que la persona elija
+  estado.simFijada = null;
+  estado.fijada = { grupo, sid: ed.sid, desde: performance.now(), por, q: null, dudosa: ed.dudosa, porCodigo: !!(forzada && est.forzarPorCodigo) };   // q: el siguiente cuadro
   anotar("fijada", datos().buscar.nombres[grupo][0], ed.sid, por, ed.dudosa ? "dudosa" : "", ed.puntaje.toFixed(3), ed.todas.length);
   if (navigator.vibrate) navigator.vibrate(35);
   alEstado?.("listo");
@@ -594,18 +741,26 @@ async function leerCodigo(foto) {
 
 // Con el codigo leido, entre las ediciones del nombre fijado: set (vale 2) y numero (vale 1). Solo si hay un ganador claro.
 function edicionPorCodigo(texto, sids) {
+  // 0.9.7: lo leido en varios intentos se junta (uno trae "FIN • EN", otro "0115 M"). Gana la impresion cuyo numero se
+  // leyo y que ninguna otra comparte (con el set si lo hay); el idioma impreso decide entre el mismo set y numero.
   const fichas = new Set(texto.match(/[A-Z0-9]{2,5}/g) || []);
   const numeros = new Set((texto.match(/\d{1,4}/g) || []).map((n) => String(Number(n))));
-  const d = datos(), puntos = [];
+  const idioma = [...fichas].map((x) => IDIOMA_CODIGO[x]).find(Boolean);   // "DMU • ES", "TRK • TLH"
+  const cand = [];
   for (const sid of sids) {
     const fila = indice.porSid.get(sid)?.[0]; if (!fila) continue;
-    const set = fila[1].toUpperCase(), num = String(fila[2]).replace(/^0+/, "");
-    const pts = (fichas.has(set) ? 2 : 0) + (numeros.has(num.replace(/\D+$/, "")) ? 1 : 0);
-    if (pts) puntos.push([sid, pts]);
+    const set = fila[1].toUpperCase(), num = String(fila[2]).replace(/^0+/, ""), numBase = num.replace(/\D+$/, "");
+    const setOk = fichas.has(set), numOk = numeros.has(numBase) && (numBase === num || texto.includes(num.toUpperCase()) || !/\D$/.test(num));
+    const lang = !idioma || !fila[4] ? 0 : fila[4] === idioma ? 1 : -1;
+    if (setOk || numOk) cand.push({ sid, set, setOk, numOk, pts: (setOk ? 2 : 0) + (numOk ? 2 : 0) + lang });
   }
-  puntos.sort((a, b) => b[1] - a[1]);
-  if (!puntos.length || puntos[0][1] < 2 || (puntos[1] && puntos[1][1] === puntos[0][1])) return null;
-  return puntos[0][0];
+  cand.sort((a, b) => b.pts - a.pts);
+  const [a, b] = cand;
+  if (!a || (b && b.pts === a.pts)) return null;
+  if (a.numOk && a.setOk) return a.sid;
+  if (a.numOk && !cand.some((x) => x !== a && x.numOk)) return a.sid;                 // el unico con ese numero
+  if (a.setOk && sids.filter((s2) => indice.porSid.get(s2)?.[0]?.[1]?.toUpperCase() === a.set).length === 1) return a.sid;   // la unica de ese set
+  return null;
 }
 
 async function leerNombre(foto, otro = null) {
@@ -751,20 +906,25 @@ async function leer(foto) {
     const f0 = estado.fijada;
     if (f0) {
       const ed = elegirEdicion(f0.grupo);
+      const revisar = f0.porCodigo && estado.movida && (f0.revisiones ?? 0) < 6;   // 0.9.7: se movio despues de fijarla: ¿es otra version?
+      if (revisar) { f0.revisiones = (f0.revisiones ?? 0) + 1; estado.movida = false; f0.porCodigo = false; f0.codigo = ""; f0.intentosCodigo = Math.min(f0.intentosCodigo ?? 0, 3); }
       const varias = ed && ed.todas.length > 1 && !f0.porCodigo && (f0.intentosCodigo ?? 0) < (f0.dudosa ? 10 : 4);
       if (varias) {
         f0.intentosCodigo = (f0.intentosCodigo ?? 0) + 1;
         const texto = await leerCodigo(fotoCon(foto));
         if (!corriendo || est !== estado) return;
-        const sid = edicionPorCodigo(texto, ed.todas);
+        f0.codigo = ((f0.codigo || "") + " " + texto).slice(-160);                // se juntan los intentos de esta carta
+        const sid = edicionPorCodigo(f0.codigo, ed.todas);
         let cambio = false;
         if (sid) {
-          f0.porCodigo = true;
           anotar("edicion-por-codigo", sid);
+          const otraCopia = (foto.sim ?? 1) < OTRA_VERSION_SIM;                  // la foto que se leyo ya era de otra copia
+          if (sid !== f0.sid && (otraCopia || (!corrigiendo(f0) && !f0.dudosa))) { await otraVersion(sid, "codigo", true); return; }
+          f0.porCodigo = true;
           if (sid !== f0.sid || f0.dudosa) { f0.sid = sid; f0.dudosa = false; cambio = true; }
         }
         if (cambio) publicar({ ...ed, sid: f0.sid, dudosa: !!f0.dudosa, todas: [f0.sid, ...ed.todas.filter((x) => x !== f0.sid)] });
-        if (f0.intentosCodigo % 2 === 1) return;                 // alterna: codigo, nombre, codigo, nombre...
+        if (f0.dudosa || f0.intentosCodigo % 2 === 1) return;   // alterna: codigo, nombre, codigo... (con aviso, solo codigo)
       }
     }
     let r = await nombreConMica(foto, null);
@@ -801,10 +961,12 @@ async function leer(foto) {
     const claro = r.s - r.segundo >= 0.08;
     // nombre medio leido (mica, japones) que coincide con lo que dice la imagen: dos pistas independientes que apuntan a lo mismo
     const p = promedio(), vis = p ? visualDeGrupo(p, r.grupo) : -1;
-    const acuerdo = claro && r.s >= 0.6 && vis >= VISUAL_FUERTE - 0.03 && p && indice.grupoDeSid.get(indice.ids[mejores(p, 1)[0][0]]) === r.grupo;
+    const acuerdo = (claro && r.s >= 0.6 && vis >= VISUAL_FUERTE - 0.03 && p && indice.grupoDeSid.get(indice.ids[mejores(p, 1)[0][0]]) === r.grupo)
+      || (r.s >= 0.55 && estado.pista?.grupo === r.grupo && estado.pista.s >= ARTE_ACUERDO);    // 0.9.7: el arte dice lo mismo
+    if ((r.s >= NOMBRE_SEGURO && claro) && estado.giro == null && foto.giro != null) { estado.giro = foto.giro; anotar("giro", foto.giro, "por el nombre"); }
     if ((r.s >= NOMBRE_SEGURO && claro) || (v.n >= 2 && v.mejor >= NOMBRE_DOBLE)) await fijar(r.grupo, "nombre");
     else if (acuerdo) await fijar(r.grupo, "nombre+imagen");
-    else if (r.s < NOMBRE_DOBLE) fallo();
+    else { if (r.s < NOMBRE_DOBLE) fallo(); await votacion(); }
   } catch (e) {
     console.error(e);
   } finally {
@@ -826,12 +988,90 @@ function capturar(guia) {
 }
 
 // Deja lista la siguiente carta. El resultado anterior se queda en pantalla, atenuado, hasta que haya uno nuevo.
+// 0.9.7: la carta fijada ya no se corrige despues de CORREGIR_MS: si el codigo o el arte dicen otra version del mismo
+// nombre, es OTRA carta (otra copia puesta encima) y entra como su propia linea del lote.
+async function otraVersion(sid, motivo, porCodigo = false) {
+  const f = estado.fijada; if (!f) return;
+  const grupo = f.grupo;
+  anotar("otra-version", sid, motivo);
+  const ult = estado.arte[estado.arte.length - 1], giro = estado.giro;
+  soltar("otra version");
+  estado.forzarSid = sid; estado.forzarPorCodigo = porCodigo; estado.giro = giro;
+  estado.arte = ult ? [ult] : [];                                // solo el ultimo cuadro: el de la carta nueva
+  await fijar(grupo, motivo);
+}
+const corrigiendo = (f) => performance.now() - f.desde < CORREGIR_MS;
+
 function soltar(motivo) {
   const leyendo = estado.leyendo, habia = !!estado.fijada;
   estado = nuevoEstado(); estado.leyendo = leyendo;
   anotar("suelta", motivo);
   if (motivo === "sin carta") luzNormal();
   if (habia) alResultado?.(null);
+}
+
+// El arte del cuadro: con la orientacion sin saber, se compara el recuadro normal en las dos opciones y gana la que mas se
+// parece (2 cuadros con ventaja clara o 4 en total); ya sabida, se usan los dos recortes (normal y full art) de esa orientacion.
+async function mirarArte(img, W, H, c, opciones) {
+  let p;
+  if (estado.giro == null) {
+    const ps = [];
+    for (const r of opciones) { const co = orientar(c, r), qs = []; for (const rc of ARTE_RECORTES) qs.push(await huellaDe(recorteColor(img, W, H, co, rc))); ps.push(puntajesArte(qs)); }
+    const m = ps.map(mejorDe), k = m[0] >= m[1] ? 0 : 1;
+    if (Math.abs(m[0] - m[1]) >= GIRO_MARGEN) estado.giroVotos[opciones[k]] += 2; else estado.giroVotos[opciones[k]]++;
+    const a = estado.giroVotos[opciones[0]], b = estado.giroVotos[opciones[1]];
+    if (Math.max(a, b) >= 4 && a !== b) { estado.giro = a > b ? opciones[0] : opciones[1]; anotar("giro", estado.giro); }
+    p = ps[k];
+  } else {
+    const co = orientar(c, estado.giro), qs = [];
+    for (const r of ARTE_RECORTES) qs.push(await huellaDe(recorteColor(img, W, H, co, r)));
+    p = puntajesArte(qs);
+  }
+  if (!corriendo) return;
+  estado.arte.push(p); if (estado.arte.length > ARTE_VENTANA) estado.arte.shift();
+  const pa = pistaArte(); estado.pista = pa;
+  if (!pa) return;
+  anotar("arte-pista", datos().buscar.nombres[pa.grupo]?.[0], +pa.s.toFixed(3), +(pa.s - pa.s2).toFixed(3));
+  const f = estado.fijada;
+  if (f) {                                                       // ¿otra version del mismo nombre encima de la anterior?
+    if (f.grupo === pa.grupo && !corrigiendo(f) && estado.arte.length >= 2 && !estado.quieta) {
+      const sids = [...new Set(datos().buscar.nombres[f.grupo][2].map((i) => datos().buscar.imp[i][0].split(":")[0]))];
+      const m = arteDeSids(f.grupo, sids, pa.p), propio = m.get(f.sid) ?? -1;
+      let mejor = null; for (const [sid, v] of m) if (!mejor || v > mejor[1]) mejor = [sid, v];
+      if (mejor && mejor[0] !== f.sid && mejor[1] >= ARTE_SEGURO && mejor[1] - propio >= OTRA_VERSION_ARTE) {
+        f.otraArte = (f.otraArte || 0) + 1;
+        const mismas = [...m].filter(([, v]) => mejor[1] - v < IGUALES).map(([sid]) => sid);
+        if (f.otraArte >= 2) await otraVersion(mismas.length === 1 ? mejor[0] : null, "arte");
+      } else f.otraArte = 0;
+    }
+    return;
+  }
+  const veto = [...estado.votos].some(([g, v]) => g !== pa.grupo && v.mejor >= NOMBRE_SEGURO);   // se leyo claro otro nombre
+  if (!veto && estado.arte.length >= 2 && pa.s >= ARTE_SEGURO && pa.s - pa.s2 >= ARTE_MARGEN) await fijar(pa.grupo, "arte");
+  else await votacion();
+}
+
+// 0.9.7: todas las pistas juntas. Nombre (lo mejor leido de cada carta), arte y huella de la carta completa dan cada una
+// de 0 a 1 punto. Dos pistas medias que coinciden alcanzan; una sola pista fuerte contra las otras dos, no.
+const evNombre = (s) => Math.max(0, Math.min(1, (s - 0.5) / 0.4));
+const evArte = (s) => Math.max(0, Math.min(1, (s - 0.55) / 0.25));
+const evVis = (s) => Math.max(0, Math.min(1, (s - 0.6) / 0.25));
+function arteDeGrupo(p, g) { let m = -1; for (const j of arte?.porGrupo.get(g) || []) if (p[j] > m) m = p[j]; return m; }
+async function votacion() {
+  if (estado.fijada) return;
+  const pa = estado.pista, pv = promedio(), cand = new Set(estado.votos.keys());
+  if (pa) cand.add(pa.grupo);
+  if (pv) { const [j] = mejores(pv, 1)[0] || []; const g = j != null ? indice.grupoDeSid.get(indice.ids[j]) : null; if (g != null) cand.add(g); }
+  if (cand.size === 0) return;
+  const filas = [...cand].map((g) => {
+    const e = [evNombre(estado.votos.get(g)?.mejor ?? 0), pa ? evArte(arteDeGrupo(pa.p, g)) : 0, pv ? evVis(visualDeGrupo(pv, g)) : 0];
+    return { g, total: e[0] + e[1] + e[2], pistas: e.filter((x) => x >= 0.25).length, e };
+  }).sort((a, b) => b.total - a.total);
+  const [a, b] = filas;
+  if (a.total >= VOTOS_FIJAR && a.pistas >= 2 && a.total - (b?.total ?? 0) >= VOTOS_VENTAJA) {
+    anotar("votos", datos().buscar.nombres[a.g][0], a.e.map((x) => +x.toFixed(2)), b ? +b.total.toFixed(2) : 0);
+    await fijar(a.g, "votos");
+  }
 }
 
 async function cuadro(guia) {
@@ -841,7 +1081,7 @@ async function cuadro(guia) {
   lienzo.width = W; lienzo.height = H;
   ctx.drawImage(video, g.gx, g.gy, g.gw, g.gh, 0, 0, W, H);
   const img = ctx.getImageData(0, 0, W, H).data;
-  const c = esquinas(img, W, H);
+  let c = esquinas(img, W, H);
   if (!c) {
     estado.ventana = [];
     if (++estado.sinCarta >= SIN_CARTA_PARA_SOLTAR && (estado.fijada || estado.votos.size)) soltar("sin carta");
@@ -849,17 +1089,43 @@ async function cuadro(guia) {
     return;
   }
   estado.sinCarta = 0;
-  const carta = enderezar(img, W, H, conMica ? (c.interior || conMargen(c) || c) : c);
+  // 0.9.7: orientacion. Derecha o de cabeza (carta parada), o acostada hacia un lado u otro. Mientras no se sabe, el arte de
+  // las dos opciones decide; ya sabida, la carta se endereza girada y el nombre y el codigo se leen derechos.
+  const opciones = c.acostada ? [1, 3] : [0, 2];
+  if (estado.giro != null && !opciones.includes(estado.giro)) { estado.giro = null; estado.giroVotos = [0, 0, 0, 0]; estado.arte = []; }
+  // el arte cuesta 2 a 4 huellas: sin carta fija, un cuadro si y uno no (el lector de texto sigue en cada cuadro);
+  // con carta fija, uno de cada tres (para notar otra version encima)
+  estado.n = (estado.n || 0) + 1;
+  const tocaArte = estado.fijada ? estado.n % 3 === 0 && !(estado.quieta && estado.arte.length >= ARTE_VENTANA) : (estado.giro == null || estado.n % 2 === 1);
+  if (arte && tocaArte) await mirarArte(img, W, H, c, opciones);
+  else if (!arte && c.acostada) return;                         // sin indice de arte no se sabe cual lado es arriba
+  if (!corriendo) return;
+  c = orientar(c, estado.giro ?? opciones[0]); c.giro = estado.giro ?? opciones[0];
+  const carta = enderezar(img, W, H, conMica && !c.acostada ? (c.interior || conMargen(c) || c) : c);
   // Carta fija y quieta: no hace falta otra huella (ahorra el paso mas caro de cada cuadro); el texto se sigue leyendo.
+  const prevMini = estado.mini;
   const mini = miniatura(carta), quieta = estado.mini && diferencia(mini, estado.mini) < QUIETA;
-  estado.mini = mini;
-  if (quieta && estado.fijada?.q && estado.ventana.length >= VENTANA) { lecturaDeTexto(g, W, c); return; }
+  estado.mini = mini; estado.quieta = quieta;
+  if (!quieta && estado.fijada && !corrigiendo(estado.fijada)) estado.movida = true;
+  if (quieta && estado.fijada?.q && estado.ventana.length >= VENTANA) { lecturaDeTexto(g, W, c, 1); return; }
   const q = await huella(carta);
   const f = estado.fijada;
-  if (f && !f.q) f.q = q;
-  else if (f) {
+  if (f && (f.nq || 0) < 3) {                                    // 0.9.7: referencia = promedio de los 3 primeros cuadros (no uno movido)
+    f.nq = (f.nq || 0) + 1; const acc = f.qacc || (f.qacc = new Float32Array(q.length));
+    for (let i = 0; i < q.length; i++) acc[i] += q[i];
+    let n = 0; for (let i = 0; i < q.length; i++) n += acc[i] * acc[i]; n = 1 / Math.sqrt(n || 1);
+    f.q = Float32Array.from(acc, (x) => x * n);
+  } else if (f) {
     let sim = 0; for (let i = 0; i < q.length; i++) sim += q[i] * f.q[i];
     estado.distinta = sim < OTRA_CARTA ? estado.distinta + 1 : 0;
+    // 0.9.7: otra copia del mismo nombre puesta encima (otra version, mismo arte o no): la carta completa ya no se parece
+    // tanto (misma carta: 0.91-0.98; otra version: 0.70-0.80). Tres cuadros seguidos = otra carta.
+    estado.simFijada = sim;
+    f.otraSim = sim < OTRA_VERSION_SIM ? (f.otraSim || 0) + 1 : 0;
+    if (f.otraSim >= 3 && estado.distinta < 2) {                 // se suelta y se reconoce de nuevo (arte, nombre, codigo)
+      const antes = f.sid, giro = estado.giro;
+      anotar("otra-copia", antes); soltar("otra copia"); estado.excluirSid = antes; estado.giro = giro; return;
+    }
     if (estado.distinta >= 2) { soltar("imagen"); return; }        // pusieron otra carta encima sin retirar la anterior
   }
   // si este cuadro ya no se parece al anterior, es otra carta: no mezclar sus cuadros para elegir la edicion
@@ -871,18 +1137,18 @@ async function cuadro(guia) {
   estado.ventana.push(puntajes(q));
   if (estado.ventana.length > VENTANA) estado.ventana.shift();
   if (!estado.fijada) alEstado?.(estado.reflejos >= 2 ? "reflejo" : performance.now() - estado.desde > AVISO_DIFICIL_MS ? "dificil" : "leyendo");
-  lecturaDeTexto(g, W, c);
+  lecturaDeTexto(g, W, c, (estado.fijada?.nq || 0) >= 3 && estado.simFijada != null ? estado.simFijada : 1);
 }
 
 // lectura de texto: con la foto a resolucion completa (las letras se ven mejor), sin frenar el bucle
-function lecturaDeTexto(g, W, c) {
+function lecturaDeTexto(g, W, c, sim = 1) {
   if (!estado.leyendo && lector) {
     const Wa = Math.min(1100, Math.round(g.gw)), Ha = Math.round(Wa * g.gh / g.gw);
     lienzoAlto.width = Wa; lienzoAlto.height = Ha;
     ctxAlto.drawImage(video, g.gx, g.gy, g.gw, g.gh, 0, 0, Wa, Ha);
     const k = Wa / W;
     const escalar = (q) => q.map(([x, y]) => [x * k, y * k]);
-    leer({ img: ctxAlto.getImageData(0, 0, Wa, Ha).data, W: Wa, H: Ha, c: escalar(c), ci: c.interior ? escalar(c.interior) : null });
+    leer({ img: ctxAlto.getImageData(0, 0, Wa, Ha).data, W: Wa, H: Ha, c: escalar(c), ci: c.interior ? escalar(c.interior) : null, giro: c.giro, sim });
   }
 }
 

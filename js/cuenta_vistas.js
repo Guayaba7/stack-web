@@ -278,34 +278,89 @@ export async function vistaInventario(app, id) {
   let inv;
   try { inv = await cuenta.leer(`inv:${id}`); if (inv) await asegurarPrecios(inv.piezas); } catch (e) { app.innerHTML = `<div class="vacio">${esc(mensaje(e))}</div>`; return; }
   if (!inv) { app.innerHTML = `<a class="volver" href="#/inv">${esc(t("ficha.atras"))}</a><div class="vacio">${esc(t("inv.no_existe"))}</div>`; return; }
-  const filas = (inv.piezas || []).map((p) => {
-    const n = Number(p.cantidad) || 0, unit = precioFila(filaDe(`${p.sid}:${LETRA[p.acab] || "n"}`), fuentePreferida()).mxn;
-    return { ...p, n, unit, valor: unit != null ? unit * n : null, texto: normalizar(`${p.nombre} ${p.set} ${p.numero}`) };
-  }).sort((a, b) => (b.valor ?? -1) - (a.valor ?? -1));
-  const v = valuar(inv.piezas);
-  app.innerHTML = `<a class="volver" href="#/inv">${esc(t("ficha.atras"))}</a>
-    <h1 class="titulo-vista">${esc(inv.nombre === "(default)" ? t("inv.default") : inv.nombre)}</h1>
-    <div class="resumen num"><div><span class="tenue">${esc(t("inv.valor_hoy"))}</span><b>${pesos(v.valor)}</b></div>
+  const tipo = `inv:${id}`, deshacer = [];                     // 0.9.7: quitar cartas, con deshacer
+  let filas = [];
+  const orden = new Map();                                     // el orden del primer vistazo se queda: quitar una copia no mueve la fila
+  const armar = () => {
+    filas = (inv.piezas || []).map((p) => {
+      const n = Number(p.cantidad) || 0, unit = precioFila(filaDe(`${p.sid}:${LETRA[p.acab] || "n"}`), fuentePreferida()).mxn;
+      return { ...p, n, unit, valor: unit != null ? unit * n : null, texto: normalizar(`${p.nombre} ${p.set} ${p.numero}`) };
+    }).sort((a, b) => (b.valor ?? -1) - (a.valor ?? -1));
+    const k = (f) => `${f.sid}|${f.acab || "nonfoil"}`;
+    if (!orden.size) filas.forEach((f, i) => orden.set(k(f), i));
+    else filas.sort((a, b) => (orden.get(k(a)) ?? 1e9) - (orden.get(k(b)) ?? 1e9));
+  };
+  const resumen = () => { const v = valuar(inv.piezas); return `<div class="resumen num"><div><span class="tenue">${esc(t("inv.valor_hoy"))}</span><b>${pesos(v.valor)}</b></div>
       <div><span class="tenue">${esc(t("inv.costo"))}</span><b>${pesos(v.costo)}</b></div>
       <div><span class="tenue">${esc(t("inv.cartas"))}</span><b>${v.cartas.toLocaleString()}</b></div></div>
-    ${v.sinPrecio ? `<p class="nota">${esc(t("inv.sin_precio", { n: v.sinPrecio }))}</p>` : ""}
+    ${v.sinPrecio ? `<p class="nota">${esc(t("inv.sin_precio", { n: v.sinPrecio }))}</p>` : ""}`; };
+  armar();
+  app.innerHTML = `<a class="volver" href="#/inv">${esc(t("ficha.atras"))}</a>
+    <h1 class="titulo-vista">${esc(inv.nombre === "(default)" ? t("inv.default") : inv.nombre)}</h1>
+    <div id="inv-res">${resumen()}</div>
     <div class="buscador"><input id="filtro-inv" type="text" placeholder="${esc(t("inv.filtrar"))}" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+    <p class="inv-msg tenue" id="inv-msg" role="status"></p>
     <div id="tog-inv"></div><ul class="lista" id="lista-inv"></ul>`;
-  const lista = app.querySelector("#lista-inv"), cajaTog = app.querySelector("#tog-inv");
+  const lista = app.querySelector("#lista-inv"), cajaTog = app.querySelector("#tog-inv"), msg = app.querySelector("#inv-msg");
   const pintar = (q) => {
     const partes = normalizar(q).split(" ").filter(Boolean);
     cajaTog.innerHTML = barraToggles(TOGI, "i");
     const vis = filas.filter((f) => partes.every((p) => f.texto.includes(p)) && pasaFila(TOGI, filaDe(`${f.sid}:${LETRA[f.acab] || "n"}`))).slice(0, 400);
-    lista.innerHTML = vis.map((f) => `<li><a class="fila" href="#/c/${encodeURIComponent(`${f.sid}:${LETRA[f.acab] || "n"}`)}">
+    lista.innerHTML = vis.map((f) => `<li class="inv-li" data-sid="${esc(f.sid)}" data-acab="${esc(f.acab || "nonfoil")}"><a class="fila" href="#/c/${encodeURIComponent(`${f.sid}:${LETRA[f.acab] || "n"}`)}">
         <img loading="lazy" alt="" src="${miniatura(f.sid)}" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'sin-img'}))">
         <div class="medio"><div class="titulo">${esc(f.nombre)}</div><div class="sub">${esc(String(f.set || "").toUpperCase())} #${esc(f.numero)} · ${esc(t(`acabado.${LETRA[f.acab] || "n"}`))} · ×${f.n}</div></div>
-        <div class="der"><div class="precio num">${f.valor != null ? pesos(f.valor) : "—"}</div><div class="sub num">${f.unit != null ? `${pesos(f.unit)} c/u` : esc(t("inv.sin_precio_corto"))}</div></div></a></li>`).join("")
+        <div class="der"><div class="precio num">${f.valor != null ? pesos(f.valor) : "—"}</div><div class="sub num">${f.unit != null ? `${pesos(f.unit)} c/u` : esc(t("inv.sin_precio_corto"))}</div></div></a>
+        <span class="inv-acc"><button type="button" data-inv="menos" title="${esc(t("inv.quitar_una"))}" aria-label="${esc(t("inv.quitar_una"))}">−</button><button type="button" class="inv-x" data-inv="todas" title="${esc(t("inv.quitar_todas"))}" aria-label="${esc(t("inv.quitar_todas"))}">✕</button></span></li>`).join("")
       || `<li class="vacio">${esc(togActivo(TOGI) ? t("tog.nada") : t("resultados.sin", { q }))}</li>`;
   };
   pintar("");
   const inp = app.querySelector("#filtro-inv");
+  const refrescar = () => { armar(); app.querySelector("#inv-res").innerHTML = resumen(); pintar(inp.value); };
+  const avisar = (texto) => { msg.className = "inv-msg ok"; msg.innerHTML = `${esc(texto)}${deshacer.length ? ` <button type="button" class="boton-fmt" data-inv="deshacer">${esc(t("inv.deshacer"))}</button>` : ""}`; };
+  let ocupado = false;
+  const aplicar = async (cambios) => {                         // cambios: [{pieza, d}] (d < 0 quita, d > 0 regresa)
+    if (ocupado) return false; ocupado = true;
+    try { inv = await cambiarPiezas(tipo, cambios); refrescar(); return true; }
+    catch (e) { msg.className = "inv-msg error"; msg.textContent = mensaje(e); return false; }
+    finally { ocupado = false; }
+  };
   inp.addEventListener("input", (e) => pintar(e.target.value));
   cajaTog.addEventListener("click", (e) => { const b = e.target.closest("[data-tog]"); if (b) { alternarTog(TOGI, Number(b.dataset.tog)); pintar(inp.value); } });
+  app.onclick = async (e) => {
+    const b = e.target.closest("[data-inv]"); if (!b) return;
+    e.preventDefault();
+    if (b.dataset.inv === "deshacer") {
+      const ult = deshacer.pop(); if (!ult) return;
+      if (await aplicar([{ pieza: ult.pieza, d: ult.q }])) avisar(t("inv.regresada", { n: ult.q, nombre: ult.pieza.nombre }));
+      else deshacer.push(ult);
+      return;
+    }
+    const li = b.closest(".inv-li"), p = (inv.piezas || []).find((x) => x.sid === li.dataset.sid && (x.acab || "nonfoil") === li.dataset.acab); if (!p) return;
+    const q = b.dataset.inv === "todas" ? Number(p.cantidad) || 0 : 1, copia = { ...p };
+    if (await aplicar([{ pieza: p, d: -q }])) { deshacer.push({ pieza: copia, q }); if (deshacer.length > 30) deshacer.shift(); avisar(t("inv.quitada", { n: q, nombre: p.nombre })); }
+  };
+}
+
+// Quita o regresa copias en un inventario de la cuenta (sobre la version mas nueva; si otro dispositivo guardo antes, reintenta).
+// cambios: [{pieza: {sid, acab, nombre, set, numero, costo_prom}, d}]. Devuelve el documento guardado.
+async function cambiarPiezas(tipo, cambios) {
+  for (let intento = 0; intento < 4; intento++) {
+    const info = (await cuenta.listar()).find((d) => d.tipo === tipo);
+    if (!info) throw new Error("no_existe");
+    const actual = structuredClone(await cuenta.leer(tipo, info.version));
+    cuenta.fijarVersion(tipo, info.version);
+    const piezas = actual.piezas || (actual.piezas = []), ahora = new Date().toISOString().slice(0, 19) + "+00:00";
+    for (const { pieza: l, d } of cambios) {
+      const acab = l.acab || "nonfoil", p = piezas.find((x) => x.sid === l.sid && (x.acab || "nonfoil") === acab);
+      if (p) { p.cantidad = Math.max(0, (Number(p.cantidad) || 0) + d); if (d > 0) p.agregada = ahora; }
+      else if (d > 0) piezas.push({ sid: l.sid, acab, nombre: l.nombre, set: l.set, numero: l.numero, cantidad: d, costo_prom: l.costo_prom ?? null, agregada: ahora });
+    }
+    actual.piezas = piezas.filter((x) => (Number(x.cantidad) || 0) > 0);
+    actual.actualizado = ahora;
+    try { await cuenta.guardar(tipo, actual); return actual; }
+    catch (e) { if (e.estado !== 409) throw e; }
+  }
+  throw new Error("error");
 }
 
 // ---------------------------------------------------------------- watchlist

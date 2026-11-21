@@ -166,3 +166,8 @@ body[data-tema="AGUJERO"]{--bg:#030203;--panel:rgba(12,8,7,.84);--line:rgba(255,
 body[data-tema="SEIGAIHA"]{--bg:#1c0706;--panel:rgba(32,9,8,.86);--line:rgba(240,160,140,.3);--txt:#fbe9e2;--dim:#c08f84;--acc:#ff8a76;--amb:#ffc48a;--sel:rgba(180,60,45,.36);--err:#ff6b6b;--hi:#fff;
   --foil:#ffd0c4;--etched:#ffc48a;--har:#ffb3a8;--grid:rgba(160,60,45,.22);--sel2:rgba(140,40,30,.28);--selline:#ff8a76;--edit:rgba(28,8,7,.8);--bueno:#7ee0a1;--malo:#ff6b6b;--ani:#ff8a76}
 body[data-tema="SEIGAIHA"] main{background:color-mix(in srgb,var(--bg) 84%,transparent)}
+/* ---- 0.9.7: con cualquier fondo animado, el contenido (decks, inventarios, META, listas) va sobre un panel casi opaco
+   para que los nombres y precios siempre se lean; el tema se sigue viendo a los lados y en la portada */
+body.con-fondo:not(.en-portada) main{background:color-mix(in srgb,var(--bg) 92%,transparent);box-shadow:0 0 0 1px var(--line),0 0 40px 10px color-mix(in srgb,var(--bg) 70%,transparent);min-height:calc(100dvh - 60px)}
+body.con-fondo:not(.en-portada) main{text-shadow:none}
+@media (min-width:900px){body.con-fondo:not(.en-portada) main{backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}}

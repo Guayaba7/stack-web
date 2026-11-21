@@ -918,3 +918,20 @@ body.con-hoja { overflow: hidden; }
 .dk-pub .meta-det { max-width: 900px; }
 @media (min-width: 720px) { .ficha-imgw { width: 100%; margin: 0; } }
 @media (max-width: 420px) { .dk-hoja-imgw { width: 62%; align-self: center; } }
+
+/* ---- 0.9.7: quitar cartas del inventario */
+.inv-li { display: flex; align-items: stretch; background: var(--panel); }
+.inv-li .fila { flex: 1; min-width: 0; }
+.inv-acc { display: flex; flex: none; align-items: center; gap: 6px; padding: 0 10px 0 2px; }
+.inv-acc button { width: 34px; height: 34px; padding: 0; border: 1px solid var(--linea); border-radius: 0; background: transparent; color: var(--texto); font: inherit; font-size: 16px; cursor: pointer; }
+.inv-acc button:hover { border-color: var(--verde); color: var(--verde); }
+.inv-acc .inv-x:hover { border-color: var(--baja); color: var(--baja); }
+.inv-msg { min-height: 1.4em; margin: 6px 0; }
+.inv-msg .boton-fmt { margin-left: 8px; }
+/* ---- 0.9.7: version de la pagina, hasta el final */
+.pie-web { max-width: 640px; margin: 0 auto; padding: 18px 16px calc(28px + env(safe-area-inset-bottom)); text-align: center; color: var(--tenue); font-size: 11px; letter-spacing: .14em; opacity: .75; }
+/* ---- 0.9.7: deck al inventario */
+.dk-alinv { display: grid; gap: 8px; max-width: 460px; margin: 10px 0; padding: 12px; border: 1px solid var(--linea); background: var(--panel); }
+.dk-alinv select { min-height: 40px; width: 100%; background: var(--fondo); color: var(--texto); border: 1px solid var(--linea); font: inherit; }
+.dk-alinv-op { display: flex; align-items: center; gap: 8px; min-height: 32px; cursor: pointer; }
+.dk-alinv-bot { display: flex; gap: 8px; flex-wrap: wrap; }

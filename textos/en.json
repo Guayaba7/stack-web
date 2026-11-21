@@ -474,5 +474,22 @@
   "dk.link_error": "The link could not be created.",
   "dk.link_malo": "This deck link is incomplete or damaged.",
   "dk.link_nota": "shared deck",
-  "dk.link_guardar": "SAVE TO MY DECKS"
+  "dk.link_guardar": "SAVE TO MY DECKS",
+  "inv.quitar_una": "Remove one copy",
+  "inv.quitar_todas": "Remove all copies",
+  "inv.deshacer": "UNDO",
+  "inv.quitada": "Removed {n} × {nombre}. The app will see it in less than a minute.",
+  "inv.regresada": "{n} × {nombre} restored.",
+  "dk.alinv": "TO INVENTORY",
+  "dk.alinv_ayuda": "Adds this deck's cards to one of your inventories",
+  "dk.alinv_titulo": "Add the deck to an inventory",
+  "dk.alinv_todas": "All the cards",
+  "dk.alinv_faltan": "Only the ones I am missing",
+  "dk.alinv_agregar": "ADD",
+  "dk.cancelar": "CANCEL",
+  "dk.alinv_nota": "The main deck, sideboard and commander go in, with the printing chosen for each card; cards with no printing go in as the cheapest one. No cost.",
+  "dk.alinv_nada": "Nothing to add: you already have every card.",
+  "dk.alinv_listo": "Done: {n} cards in {inv}. The app will see it in less than a minute.",
+  "dk.alinv_sin": "{n} were not found and were left out.",
+  "dk.alinv_entra": "Sign in to your Stack account to add cards to your inventories."
 }

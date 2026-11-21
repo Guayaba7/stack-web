@@ -345,6 +345,54 @@ async function leerLinkDeck(txt) {
   return { nombre: String(j.n || "Deck").slice(0, 60), formato: String(j.f || ""), cartas: j.c.filter((x) => Array.isArray(x) && x[1] && x[0] > 0).slice(0, 400)
     .map(([q, n, zc, sid, L]) => ({ n: String(n), q: Math.min(999, Number(q) || 1), z: ZD[zc] || "main", ...(sid && /^[0-9a-f-]{36}$/i.test(sid) ? { sid, acab: ACAB_DE[L] || "nonfoil" } : {}) })) };
 }
+// ---- el deck al inventario (0.9.7): todas las cartas o solo las que faltan; las que no tienen version entran como la mas barata
+async function lineasParaInventario(d, soloFaltan) {
+  await asegurarNombres(d.cartas);
+  const tengo = soloFaltan ? (await cargarTengo()) || {} : {};
+  const porNombre = new Map();
+  for (const c of d.cartas) if (c.z !== "quizas" && c.q > 0) { if (!porNombre.has(c.n)) porNombre.set(c.n, []); porNombre.get(c.n).push(c); }
+  const out = [], sinDato = [];
+  for (const [n, ls] of porNombre) {
+    let falta = ls.reduce((s_, c) => s_ + c.q, 0); if (soloFaltan) falta = Math.max(0, falta - (tengo[n] || 0));
+    for (const c of ls.slice().sort((a, b) => (b.sid ? 1 : 0) - (a.sid ? 1 : 0))) {
+      if (falta <= 0) break; const q = Math.min(c.q, falta); falta -= q;
+      let f = c.sid ? impDe(c) : null;
+      if (!f) { const g = nombres().get(n), fs = g ? g[2].map((i) => datos().buscar.imp[i]).filter(Boolean) : [];
+        f = fs.map((x) => [x, precioImp(x, "tcg")]).sort((a, b) => (a[1] ?? 1e12) - (b[1] ?? 1e12) || (a[0][3] === "n" ? -1 : 1))[0]?.[0] || null; }
+      if (!f) { sinDato.push(n); continue; }
+      const sid = String(f[0]).split(":")[0], acab = ACAB_DE[f[3]] || "nonfoil", ya = out.find((x) => x.sid === sid && x.acab === acab);
+      if (ya) ya.cantidad += q; else out.push({ sid, acab, nombre: n, set: String(f[1]), numero: String(f[2]), cantidad: q });
+    }
+  }
+  return { lineas: out, sinDato };
+}
+async function panelAlInventario(caja, d, alTerminar) {
+  if (!cuenta.sesion()) { caja.innerHTML = `<p class="tenue">${esc(t("dk.alinv_entra"))} <a href="#/cuenta">${esc(t("cuenta.entrar"))}</a></p>`; return; }
+  const cv = await import("./cuenta_vistas.js");
+  caja.innerHTML = `<div class="cargando"></div>`;
+  let invs = []; try { invs = await cv.inventariosCuenta(); } catch (e) { caja.innerHTML = `<p class="error">${esc(cv.mensajeCuenta(e))}</p>`; return; }
+  const opciones = invs.length ? invs.map((i) => `<option value="${esc(i.tipo)}">${esc(i.nombre === "(default)" ? t("inv.default") : i.nombre)}</option>`).join("") : `<option value="">${esc(t("inv.default"))}</option>`;
+  caja.innerHTML = `<form class="dk-alinv"><b>${esc(t("dk.alinv_titulo"))}</b>
+    <label>${esc(t("inv.inventario"))}<select name="inv">${opciones}</select></label>
+    <label class="dk-alinv-op"><input type="radio" name="cuales" value="todas" checked> ${esc(t("dk.alinv_todas"))}</label>
+    <label class="dk-alinv-op"><input type="radio" name="cuales" value="faltan"> ${esc(t("dk.alinv_faltan"))}</label>
+    <div class="dk-alinv-bot"><button type="submit" class="primario">${esc(t("dk.alinv_agregar"))}</button><button type="button" class="boton-fmt" data-alinv-cerrar>${esc(t("dk.cancelar"))}</button></div>
+    <p class="tenue" role="status" data-alinv-msg>${esc(t("dk.alinv_nota"))}</p></form>`;
+  const form = caja.querySelector("form"), msg = caja.querySelector("[data-alinv-msg]");
+  caja.querySelector("[data-alinv-cerrar]").onclick = () => { caja.innerHTML = ""; };
+  form.onsubmit = async (e) => {
+    e.preventDefault(); const b = form.querySelector("button[type=submit]"); b.disabled = true; msg.className = "tenue"; msg.textContent = t("inv.agregando");
+    try {
+      const { lineas, sinDato } = await lineasParaInventario(d, form.cuales.value === "faltan");
+      const n = lineas.reduce((s_, l) => s_ + l.cantidad, 0);
+      if (!n) { msg.textContent = t("dk.alinv_nada"); b.disabled = false; return; }
+      const nombreInv = await cv.agregarVarias(form.inv.value || null, lineas);
+      TENGO = null;
+      caja.innerHTML = `<p class="ok">${esc(t("dk.alinv_listo", { n, inv: nombreInv === "(default)" ? t("inv.default") : nombreInv }))}${sinDato.length ? " " + esc(t("dk.alinv_sin", { n: sinDato.length })) : ""}</p>`;
+      alTerminar?.();
+    } catch (ex) { b.disabled = false; msg.className = "error"; msg.textContent = cv.mensajeCuenta(ex); }
+  };
+}
 async function compartirLink(d, msg) {
   if (!d || !d.cartas?.length) { if (msg) msg.textContent = t("dk.vacio"); return; }
   try {
@@ -487,8 +535,8 @@ export async function vistaMeta(app, fmtRuta) {
       const inf = d.info || {};
       det.innerHTML = `<h2>${esc(d.nombre)}</h2><p class="tenue">${esc(NOMBRE_FMT[d.formato] || d.formato)}${inf.evento ? " · " + esc(inf.evento) : ""}${inf.puesto ? ` · ${inf.puesto}°` : ""}${inf.jugador ? " · " + esc(inf.jugador) : ""}` +
         `${inf.fuente ? ` · <a href="${esc(inf.url || "#")}" target="_blank" rel="noopener">${esc(FUENTE[inf.fuente] || inf.fuente)}</a>` : ""}${inf.promedio ? " · " + esc(t("meta.promedio")) : ""}</p>
-        <div class="acciones-deck"><button type="button" class="primario" data-copiar-deck>${esc(t("meta.a_mis_decks"))}</button><button type="button" class="boton-fmt" data-texto>${esc(t("meta.copiar_lista"))}</button><button type="button" class="boton-fmt" data-link title="${esc(t("dk.link_ayuda"))}">${esc(t("dk.link"))}</button></div>
-        <p id="meta-msg" class="tenue" role="status"></p>${htmlDeck(d, { tienda: M.tienda, tengo })}`;
+        <div class="acciones-deck"><button type="button" class="primario" data-copiar-deck>${esc(t("meta.a_mis_decks"))}</button><button type="button" class="boton-fmt" data-texto>${esc(t("meta.copiar_lista"))}</button><button type="button" class="boton-fmt" data-link title="${esc(t("dk.link_ayuda"))}">${esc(t("dk.link"))}</button><button type="button" class="boton-fmt" data-alinv title="${esc(t("dk.alinv_ayuda"))}">${esc(t("dk.alinv"))}</button></div>
+        <div id="meta-alinv"></div><p id="meta-msg" class="tenue" role="status"></p>${htmlDeck(d, { tienda: M.tienda, tengo })}`;
       det.dataset.deck = JSON.stringify({ nombre: d.nombre, formato: d.formato, cartas: d.cartas, origen: d.origen || null });
       if (mover && matchMedia("(max-width: 899px)").matches) det.scrollIntoView({ behavior: "smooth", block: "start" });
     };
@@ -510,6 +558,7 @@ export async function vistaMeta(app, fmtRuta) {
     const det = app.querySelector("#meta-det"), msg = app.querySelector("#meta-msg");
     if (e.target.closest("[data-texto]")) { const d = JSON.parse(det.dataset.deck || "null"); if (d && msg) msg.textContent = (await copiar(textoDeck(d))) ? t("meta.copiada") : t("meta.no_copiada"); return; }
     if (e.target.closest("[data-link]")) { await compartirLink(JSON.parse(det.dataset.deck || "null"), msg); return; }
+    if (e.target.closest("[data-alinv]")) { const d = JSON.parse(det.dataset.deck || "null"), caja = det.querySelector("#meta-alinv"); if (d && caja) await panelAlInventario(caja, d); return; }
     if (e.target.closest("[data-faltan]")) {
       const d = JSON.parse(det.dataset.deck || "null"); if (!d) return;
       const P = preciosDeck(d.cartas, TENGO); if (msg) msg.textContent = (await copiar(P.faltan.map(([n, q]) => `${q} ${n}`).join("\n"))) ? t("meta.copiada") : t("meta.no_copiada"); return;
@@ -587,16 +636,16 @@ async function editor(app, id) {
     cuenta.fijarVersion(d.tipo, d.version);
   } catch { app.innerHTML += `<p class="error">${esc(t("dk.err_leer"))}</p>`; return; }
   Object.assign(E, { edh: null, q: "", qcmd: "", cols: new Set(), tipos: new Set(), rar: new Set(), cmc: null, pest: "deck" });
-  const tengo = await cargarTengo();
+  let tengo = await cargarTengo();
   await asegurarNombres(E.deck.cartas);
   app.innerHTML = `<nav class="dk-migas"><a href="#/decks">‹ ${esc(t("dk.mis_decks"))}</a><span id="dk-estado" class="tenue" role="status"></span></nav>
     <div class="dk-cab"><input id="dk-nombre" class="dk-nombre" maxlength="60" value="${esc(E.deck.nombre)}" aria-label="${esc(t("dk.nombre"))}">
       <select id="dk-fmt" aria-label="${esc(t("dk.formato"))}">${FMT_DECK.map((f) => `<option value="${f}"${f === E.deck.formato ? " selected" : ""}>${esc(NOMBRE_FMT[f])}</option>`).join("")}</select></div>
     <nav class="seg-web dk-pest" id="dk-pest"></nav>
     <div class="dk-cuerpo"><section id="dk-deck" class="dk-deck"></section><section id="dk-busca" class="dk-busca"></section></div>
-    <div class="acciones-deck"><button type="button" class="boton-fmt" data-acc="copiar">${esc(t("meta.copiar_lista"))}</button><button type="button" class="boton-fmt" data-acc="link" title="${esc(t("dk.link_ayuda"))}">${esc(t("dk.link"))}</button><button type="button" class="boton-fmt" data-acc="compartir">${esc(t("dk.compartir"))}</button>
+    <div class="acciones-deck"><button type="button" class="boton-fmt" data-acc="copiar">${esc(t("meta.copiar_lista"))}</button><button type="button" class="boton-fmt" data-acc="link" title="${esc(t("dk.link_ayuda"))}">${esc(t("dk.link"))}</button><button type="button" class="boton-fmt" data-acc="alinv" title="${esc(t("dk.alinv_ayuda"))}">${esc(t("dk.alinv"))}</button><button type="button" class="boton-fmt" data-acc="compartir">${esc(t("dk.compartir"))}</button>
       <button type="button" class="boton-fmt" data-acc="importar">${esc(t("dk.importar"))}</button><button type="button" class="boton-fmt peligro" data-acc="vaciar">${esc(t("dk.vaciar"))}</button><button type="button" class="boton-fmt peligro" data-acc="borrar">${esc(t("dk.borrar"))}</button></div>
-    <p id="dk-msg" class="tenue" role="status"></p>`;
+    <div id="dk-alinv"></div><p id="dk-msg" class="tenue" role="status"></p>`;
   const busca = app.querySelector("#dk-busca"), panel = app.querySelector("#dk-deck"), estado = app.querySelector("#dk-estado"), msg = app.querySelector("#dk-msg");
   const nCartas = () => E.deck.cartas.filter((c) => c.z !== "quizas").reduce((s, c) => s + c.q, 0);
   const pintarPest = () => {                         // EDHREC solo en los formatos de comandante
@@ -784,6 +833,7 @@ async function editor(app, id) {
     const ac = e.target.closest("[data-acc]"); if (!ac) return;
     if (ac.dataset.acc === "copiar") { msg.textContent = (await copiar(textoDeck(E.deck))) ? t("meta.copiada") : t("meta.no_copiada"); }
     else if (ac.dataset.acc === "link") await compartirLink(E.deck, msg);
+    else if (ac.dataset.acc === "alinv") await panelAlInventario(app.querySelector("#dk-alinv"), E.deck, async () => { tengo = await cargarTengo(); pintarDeck(); });
     else if (ac.dataset.acc === "vaciar") {
       const n = E.deck.cartas.filter((c) => c.z !== "cmd").reduce((s_, c) => s_ + c.q, 0); if (!n) { msg.textContent = t("dk.ya_vacio"); return; }
       if (ac.dataset.seguro !== "1") { ac.dataset.seguro = "1"; ac.textContent = t("dk.vaciar_seguro", { n }); setTimeout(() => { ac.dataset.seguro = ""; ac.textContent = t("dk.vaciar"); }, 4000); return; }
@@ -873,8 +923,8 @@ export async function vistaDeckLink(app, dato) {
   const pintar = () => {
     app.innerHTML = `<article class="dk-pub"><h1 class="titulo-vista">${esc(d.nombre)}</h1>
       <p class="tenue">${esc(NOMBRE_FMT[d.formato] || d.formato || "")}${d.formato ? " · " : ""}${nC} ${esc(t("dk.cartas"))} · ${esc(t("dk.link_nota"))}</p>
-      <div class="acciones-deck"><button type="button" class="primario" data-guardar>${esc(t("dk.link_guardar"))}</button><button type="button" class="boton-fmt" data-texto>${esc(t("meta.copiar_lista"))}</button><button type="button" class="boton-fmt" data-link>${esc(t("dk.link"))}</button></div>
-      <p id="dk-msg" class="tenue" role="status"></p>
+      <div class="acciones-deck"><button type="button" class="primario" data-guardar>${esc(t("dk.link_guardar"))}</button><button type="button" class="boton-fmt" data-texto>${esc(t("meta.copiar_lista"))}</button><button type="button" class="boton-fmt" data-link>${esc(t("dk.link"))}</button><button type="button" class="boton-fmt" data-alinv title="${esc(t("dk.alinv_ayuda"))}">${esc(t("dk.alinv"))}</button></div>
+      <div id="dk-alinv"></div><p id="dk-msg" class="tenue" role="status"></p>
       <section class="meta-det">${htmlDeck(d, { tienda: st.tienda, tengo })}</section></article>`;
   };
   pintar();
@@ -885,6 +935,7 @@ export async function vistaDeckLink(app, dato) {
     const vc = e.target.closest("[data-carta]"); if (vc) { const l = vc.closest("[data-n]"); if (l) abrirHojaCarta(d, l.dataset.n, l.dataset.z, { tienda: st.tienda }); return; }
     if (e.target.closest("[data-texto]")) { msg.textContent = (await copiar(textoDeck(d))) ? t("meta.copiada") : t("meta.no_copiada"); return; }
     if (e.target.closest("[data-link]")) { await compartirLink(d, msg); return; }
+    if (e.target.closest("[data-alinv]")) { await panelAlInventario(app.querySelector("#dk-alinv"), d); return; }
     if (e.target.closest("[data-faltan]")) { const P = preciosDeck(d.cartas, tengo); msg.textContent = (await copiar(P.faltan.map(([n, q]) => `${q} ${n}`).join("\n"))) ? t("meta.copiada") : t("meta.no_copiada"); return; }
     if (e.target.closest("[data-guardar]")) {
       if (!cuenta.sesion()) { msg.innerHTML = `${esc(t("dk.entra"))} <a href="#/cuenta">${esc(t("cuenta.entrar"))}</a>`; return; }

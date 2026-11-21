@@ -451,6 +451,7 @@ function actualizarFondo() {
   const F = FONDO, tema = FONDOS[document.body.dataset.tema] ? document.body.dataset.tema : null;
   if (F.raf) { cancelAnimationFrame(F.raf); F.raf = 0; }
   document.body.classList.toggle("lienzo", !!tema && !!FONDOS_092[tema]);
+  document.body.classList.toggle("con-fondo", !!tema);          // 0.9.7: el contenido va sobre un panel casi opaco
   if (F.uiVars && F.tema !== tema) { for (const v of F.uiVars) if (document.body.dataset.tema !== "PER" || v === "ani") document.body.style.removeProperty("--" + v); F.uiVars = null; }
   if (!tema) {                                         // otro tema: se libera todo
     if (F.cv) { F.cv.width = F.cv.height = 0; F.cv.style.display = "none"; }

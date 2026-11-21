@@ -474,5 +474,22 @@
   "dk.link_error": "No se pudo crear el link.",
   "dk.link_malo": "Este link de deck está incompleto o dañado.",
   "dk.link_nota": "deck compartido",
-  "dk.link_guardar": "GUARDAR EN MIS DECKS"
+  "dk.link_guardar": "GUARDAR EN MIS DECKS",
+  "inv.quitar_una": "Quitar una copia",
+  "inv.quitar_todas": "Quitar todas las copias",
+  "inv.deshacer": "DESHACER",
+  "inv.quitada": "Quitaste {n} × {nombre}. La app lo verá en menos de un minuto.",
+  "inv.regresada": "Regresó {n} × {nombre}.",
+  "dk.alinv": "AL INVENTARIO",
+  "dk.alinv_ayuda": "Agrega las cartas de este deck a uno de tus inventarios",
+  "dk.alinv_titulo": "Agregar el deck a un inventario",
+  "dk.alinv_todas": "Todas las cartas",
+  "dk.alinv_faltan": "Solo las que me faltan",
+  "dk.alinv_agregar": "AGREGAR",
+  "dk.cancelar": "CANCELAR",
+  "dk.alinv_nota": "Entran el main, el side y el comandante, con la versión elegida de cada carta; las que no tienen versión entran como la más barata. Sin costo.",
+  "dk.alinv_nada": "No hay nada que agregar: ya tienes todas las cartas.",
+  "dk.alinv_listo": "Listo: {n} cartas en {inv}. La app lo verá en menos de un minuto.",
+  "dk.alinv_sin": "{n} no se encontraron y no entraron.",
+  "dk.alinv_entra": "Entra a tu cuenta de Stack para agregar cartas a tus inventarios."
 }
